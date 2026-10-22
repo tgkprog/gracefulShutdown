@@ -28,7 +28,7 @@ public class ConnectionManager {
                             ReceiverThreadPool receiverThreadPool, OutgoingQueue outgoingQueue,
                             IncomingQueue incomingQueue, MessageParser messageParser,
                             TransactionCache transactionCache,
-                            @Value("${server.port:5000}") int port) {
+                            @Value("${tcp.server.port:5009}") int port) {
         this.sessionManager = sessionManager;
         this.senderThreadPool = senderThreadPool;
         this.receiverThreadPool = receiverThreadPool;
