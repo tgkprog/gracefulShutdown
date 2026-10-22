@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Central Server - Status Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header h1 {
+            color: #1e3c72;
+            font-size: 28px;
+        }
+        
+        .header .timestamp {
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .card.status {
+            border-top: 4px solid #2196F3;
+        }
+        
+        .card.alert {
+            border-top: 4px solid #FF9800;
+        }
+        
+        .card.error {
+            border-top: 4px solid #F44336;
+        }
+        
+        .card.success {
+            border-top: 4px solid #4CAF50;
+        }
+        
+        .card-title {
+            font-size: 14px;
+            color: #666;
+            font-weight: 600;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .card-value {
+            font-size: 32px;
+            font-weight: bold;
+            color: #1e3c72;
+            margin-bottom: 5px;
+        }
+        
+        .card-unit {
+            font-size: 12px;
+            color: #999;
+        }
+        
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .metric-row:last-child {
+            border-bottom: none;
+        }
+        
+        .metric-label {
+            color: #666;
+            font-size: 13px;
+        }
+        
+        .metric-value {
+            font-weight: 600;
+            color: #1e3c72;
+            font-size: 13px;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        
+        .status-badge.connected {
+            background: #C8E6C9;
+            color: #2E7D32;
+        }
+        
+        .status-badge.disconnected {
+            background: #FFCDD2;
+            color: #C62828;
+        }
+        
+        .status-badge.active {
+            background: #B3E5FC;
+            color: #0277BD;
+        }
+        
+        .status-badge.inactive {
+            background: #F5F5F5;
+            color: #666;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #f0f0f0;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.3s ease;
+        }
+        
+        .progress-approved {
+            background: #4CAF50;
+        }
+        
+        .progress-rejected {
+            background: #FF9800;
+        }
+        
+        .progress-errored {
+            background: #F44336;
+        }
+        
+        .section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1e3c72;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        
+        .chart {
+            margin-top: 15px;
+        }
+        
+        .history-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+        
+        .history-table th {
+            background: #f5f5f5;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            color: #666;
+            border-bottom: 2px solid #ddd;
+        }
+        
+        .history-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .history-table tr:hover {
+            background: #f9f9f9;
+        }
+        
+        .button {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+        
+        .button:hover {
+            background: #1976D2;
+        }
+        
+        .button.refresh {
+            margin-right: 10px;
+        }
+        
+        .controls {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #2196F3;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error-message {
+            background: #FFEBEE;
+            color: #C62828;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            display: none;
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        
+        .tab {
+            padding: 10px 15px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            color: #666;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s;
+        }
+        
+        .tab.active {
+            color: #2196F3;
+            border-bottom-color: #2196F3;
+        }
+        
+        .tab:hover {
+            color: #1976D2;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>Central Server Dashboard</h1>
+                <div class="timestamp" id="timestamp">Loading...</div>
+            </div>
+            <button class="button refresh" onclick="refreshData()">Refresh Now</button>
+        </div>
+        
+        <div class="error-message" id="errorMessage"></div>
+        
+        <!-- Current Status Section -->
+        <div class="status-grid">
+            <!-- Adapter Connection -->
+            <div class="card status">
+                <div class="card-title">Adapter Connection</div>
+                <div id="adapterStatus" class="status-badge disconnected">DISCONNECTED</div>
+                <div class="metric-row">
+                    <span class="metric-label">Minutes Connected</span>
+                    <span class="metric-value" id="minutesConnected">0</span>
+                </div>
+            </div>
+            
+            <!-- Session Status -->
+            <div class="card status">
+                <div class="card-title">Session Status</div>
+                <div id="sessionStatus" class="status-badge inactive">INACTIVE</div>
+                <div class="metric-row">
+                    <span class="metric-label">Minutes Active</span>
+                    <span class="metric-value" id="minutesSessionActive">0</span>
+                </div>
+            </div>
+            
+            <!-- Transactions Sent -->
+            <div class="card">
+                <div class="card-title">Transactions Sent</div>
+                <div class="card-value" id="txnsSent">0</div>
+                <div class="card-unit">in current period</div>
+            </div>
+            
+            <!-- Transactions Received -->
+            <div class="card">
+                <div class="card-title">Transactions Received</div>
+                <div class="card-value" id="txnsReceived">0</div>
+                <div class="card-unit">in current period</div>
+            </div>
+            
+            <!-- Approval Rate -->
+            <div class="card success">
+                <div class="card-title">Approved</div>
+                <div class="card-value" id="txnsApproved">0</div>
+                <div class="card-unit" id="approvalPercentage">0%</div>
+            </div>
+            
+            <!-- Rejection Rate -->
+            <div class="card alert">
+                <div class="card-title">Rejected</div>
+                <div class="card-value" id="txnsRejected">0</div>
+                <div class="card-unit" id="rejectionPercentage">0%</div>
+            </div>
+            
+            <!-- Error Rate -->
+            <div class="card error">
+                <div class="card-title">Errored</div>
+                <div class="card-value" id="txnsErrored">0</div>
+                <div class="card-unit" id="errorPercentage">0%</div>
+            </div>
+            
+            <!-- Response Time -->
+            <div class="card">
+                <div class="card-title">Response Time</div>
+                <div class="card-value" id="avgResponseTimeMs">0</div>
+                <div class="card-unit">avg ms | peak: <span id="peakResponseTimeMs">0</span> ms</div>
+            </div>
+        </div>
+        
+        <!-- Transaction Results Breakdown -->
+        <div class="section">
+            <div class="section-title">Transaction Results Distribution</div>
+            <div class="metric-row">
+                <span class="metric-label">Approved</span>
+                <span class="metric-value" id="approvedPercent2">0%</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill progress-approved" id="approvedBar" style="width: 0%"></div>
+            </div>
+            
+            <div class="metric-row">
+                <span class="metric-label">Rejected</span>
+                <span class="metric-value" id="rejectedPercent2">0%</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill progress-rejected" id="rejectedBar" style="width: 0%"></div>
+            </div>
+            
+            <div class="metric-row">
+                <span class="metric-label">Errored</span>
+                <span class="metric-value" id="erroredPercent2">0%</span>
+            </div>
+            <div class="progress-bar">
+                <div class="progress-fill progress-errored" id="erroredBar" style="width: 0%"></div>
+            </div>
+        </div>
+        
+        <!-- History Section -->
+        <div class="section">
+            <div class="section-title">Metrics History</div>
+            
+            <div class="controls">
+                <button class="tab active" onclick="switchTab('hourly')">Last Hour (1-min)</button>
+                <button class="tab" onclick="switchTab('5hour')">Last 5 Hours</button>
+                <button class="tab" onclick="switchTab('12hour')">Last 12 Hours</button>
+                <button class="tab" onclick="switchTab('daily')">Daily</button>
+            </div>
+            
+            <!-- Hourly History -->
+            <div id="hourly" class="tab-content active">
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Connected (m)</th>
+                            <th>Session (m)</th>
+                            <th>Sent</th>
+                            <th>Received</th>
+                            <th>Approved</th>
+                            <th>Rejected</th>
+                            <th>Errored</th>
+                            <th>App %</th>
+                        </tr>
+                    </thead>
+                    <tbody id="hourlyTable">
+                        <tr><td colspan="9" style="text-align: center; color: #999;">No data</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- 5-Hour History -->
+            <div id="5hour" class="tab-content">
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Connected (m)</th>
+                            <th>Session (m)</th>
+                            <th>Sent</th>
+                            <th>Received</th>
+                            <th>Approved</th>
+                            <th>Rejected</th>
+                            <th>Errored</th>
+                            <th>App %</th>
+                        </tr>
+                    </thead>
+                    <tbody id="5hourTable">
+                        <tr><td colspan="9" style="text-align: center; color: #999;">No data</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- 12-Hour History -->
+            <div id="12hour" class="tab-content">
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Connected (m)</th>
+                            <th>Session (m)</th>
+                            <th>Sent</th>
+                            <th>Received</th>
+                            <th>Approved</th>
+                            <th>Rejected</th>
+                            <th>Errored</th>
+                            <th>App %</th>
+                        </tr>
+                    </thead>
+                    <tbody id="12hourTable">
+                        <tr><td colspan="9" style="text-align: center; color: #999;">No data</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Daily History -->
+            <div id="daily" class="tab-content">
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Connected (m)</th>
+                            <th>Session (m)</th>
+                            <th>Sent</th>
+                            <th>Received</th>
+                            <th>Approved</th>
+                            <th>Rejected</th>
+                            <th>Errored</th>
+                            <th>App %</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dailyTable">
+                        <tr><td colspan="9" style="text-align: center; color: #999;">No data</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Sleep Configuration Section -->
+        <div class="section">
+            <div class="section-title">PROCR Sleep Configuration</div>
+            
+            <div id="sleepConfigArea" style="background: #f9f9f9; padding: 20px; border-radius: 6px; border: 1px solid #ddd;">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px;">
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 5px;">Fixed Delay (ms)</label>
+                        <input type="number" id="fixedMs" min="0" step="10" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 5px;">Random Min (ms)</label>
+                        <input type="number" id="randomMinMs" min="0" step="10" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 5px;">Random Step (ms)</label>
+                        <input type="number" id="randomStepMs" min="1" step="10" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                    </div>
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 5px;">Random Max (ms)</label>
+                        <input type="number" id="randomMaxMs" min="0" step="10" style="width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px;">
+                    </div>
+                </div>
+                
+                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                    <button onclick="getSleepConfig()" style="padding: 8px 16px; background: #2196F3; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 13px;">Get From Server</button>
+                    <button onclick="setSleepConfig()" style="padding: 8px 16px; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 13px;">Post to Server</button>
+                </div>
+                
+                <div id="sleepConfigMessage" style="font-size: 12px; padding: 10px; border-radius: 4px; display: none; margin-bottom: 10px;"></div>
+                
+                <div style="font-size: 11px; color: #666; background: #f0f0f0; padding: 10px; border-radius: 4px;">
+                    <strong>Formula:</strong> sleep_ms = fixed_delay + random_value<br>
+                    <strong>Where:</strong> random_value is selected from [min, min+step, min+2*step, ..., max]
+                </div>
+                
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #ddd;">
+                    <label style="display: block; font-size: 12px; font-weight: 600; color: #666; margin-bottom: 8px;">Server Port:</label>
+                    <input type="text" id="procrPort" placeholder="8080" value="8080" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; width: 150px;">
+                    <span style="font-size: 11px; color: #999; margin-left: 10px;">PROCR server port (for localhost)</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Auto-refresh every 30 seconds
+        setInterval(refreshData, 30000);
+        
+        // Load data on page load
+        document.addEventListener('DOMContentLoaded', refreshData);
+        
+        function refreshData() {
+            fetch('/central/api/metrics')
+                .then(response => {
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    return response.json();
+                })
+                .then(data => {
+                    updateStatus(data.status);
+                    updateHistory(data.history);
+                    clearError();
+                })
+                .catch(error => {
+                    showError(`Failed to load metrics: ${error.message}`);
+                    console.error('Error loading metrics:', error);
+                });
+        }
+        
+        function updateStatus(status) {
+            // Update timestamp
+            document.getElementById('timestamp').textContent = 
+                'Last updated: ' + new Date(status.timestamp).toLocaleString();
+            
+            // Update connection status
+            const adapterStatus = status.adapterConnected 
+                ? '<span class="status-badge connected">CONNECTED</span>' 
+                : '<span class="status-badge disconnected">DISCONNECTED</span>';
+            document.getElementById('adapterStatus').innerHTML = adapterStatus;
+            document.getElementById('minutesConnected').textContent = status.minutesConnected || 0;
+            
+            // Update session status
+            const sessionStatus = status.sessionActive 
+                ? '<span class="status-badge active">ACTIVE</span>' 
+                : '<span class="status-badge inactive">INACTIVE</span>';
+            document.getElementById('sessionStatus').innerHTML = sessionStatus;
+            document.getElementById('minutesSessionActive').textContent = status.minutesSessionActive || 0;
+            
+            // Update transaction counts
+            document.getElementById('txnsSent').textContent = status.txnsSent || 0;
+            document.getElementById('txnsReceived').textContent = status.txnsReceived || 0;
+            document.getElementById('txnsApproved').textContent = status.txnsApproved || 0;
+            document.getElementById('txnsRejected').textContent = status.txnsRejected || 0;
+            document.getElementById('txnsErrored').textContent = status.txnsErrored || 0;
+            
+            // Update percentages
+            const appPct = (status.approvalPercentage || 0).toFixed(1);
+            const rejPct = (status.rejectionPercentage || 0).toFixed(1);
+            const errPct = (status.errorPercentage || 0).toFixed(1);
+            
+            document.getElementById('approvalPercentage').textContent = appPct + '%';
+            document.getElementById('rejectionPercentage').textContent = rejPct + '%';
+            document.getElementById('errorPercentage').textContent = errPct + '%';
+            
+            document.getElementById('approvedPercent2').textContent = appPct + '%';
+            document.getElementById('rejectedPercent2').textContent = rejPct + '%';
+            document.getElementById('erroredPercent2').textContent = errPct + '%';
+            
+            // Update progress bars
+            document.getElementById('approvedBar').style.width = appPct + '%';
+            document.getElementById('rejectedBar').style.width = rejPct + '%';
+            document.getElementById('erroredBar').style.width = errPct + '%';
+            
+            // Update response times
+            document.getElementById('avgResponseTimeMs').textContent = status.avgResponseTimeMs || 0;
+            document.getElementById('peakResponseTimeMs').textContent = status.peakResponseTimeMs || 0;
+        }
+        
+        function updateHistory(history) {
+            if (history.oneHour) populateTable('hourlyTable', history.oneHour);
+            if (history.fiveHour) populateTable('5hourTable', history.fiveHour);
+            if (history.twelveHour) populateTable('12hourTable', history.twelveHour);
+            if (history.daily) populateTable('dailyTable', history.daily);
+        }
+        
+        function populateTable(tableId, metrics) {
+            const tbody = document.getElementById(tableId);
+            tbody.innerHTML = '';
+            
+            if (!metrics || metrics.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" style="text-align: center; color: #999;">No data</td></tr>';
+                return;
+            }
+            
+            metrics.slice(0, 100).forEach(m => {
+                const row = tbody.insertRow();
+                const timestamp = new Date(m.timestamp).toLocaleString();
+                const appPct = (m.approvalPercentage || 0).toFixed(1);
+                
+                row.innerHTML = `
+                    <td>${timestamp}</td>
+                    <td>${m.minutesConnected || 0}</td>
+                    <td>${m.minutesSessionActive || 0}</td>
+                    <td>${m.txnsSent || 0}</td>
+                    <td>${m.txnsReceived || 0}</td>
+                    <td>${m.txnsApproved || 0}</td>
+                    <td>${m.txnsRejected || 0}</td>
+                    <td>${m.txnsErrored || 0}</td>
+                    <td>${appPct}%</td>
+                `;
+            });
+        }
+        
+        function switchTab(tabName) {
+            // Hide all tabs
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+            
+            // Show selected tab
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+        }
+        
+        function showError(message) {
+            const errorEl = document.getElementById('errorMessage');
+            errorEl.textContent = message;
+            errorEl.style.display = 'block';
+        }
+        
+        function clearError() {
+            const errorEl = document.getElementById('errorMessage');
+            errorEl.style.display = 'none';
+        }
+        
+        // Sleep Configuration Functions
+        function showSleepMessage(message, isError = false) {
+            const msgEl = document.getElementById('sleepConfigMessage');
+            msgEl.textContent = message;
+            msgEl.style.display = 'block';
+            msgEl.style.background = isError ? '#FFEBEE' : '#E8F5E9';
+            msgEl.style.color = isError ? '#C62828' : '#2E7D32';
+        }
+        
+        function getSleepConfig() {
+            const port = document.getElementById('procrPort').value || '8080';
+            const url = `http://localhost:${port}/config/sleep`;
+            
+            fetch(url, { method: 'GET', mode: 'cors' })
+                .then(response => {
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    return response.json();
+                })
+                .then(data => {
+                    document.getElementById('fixedMs').value = data.fixed_ms || 0;
+                    document.getElementById('randomMinMs').value = data.random_min_ms || 0;
+                    document.getElementById('randomStepMs').value = data.random_step_ms || 100;
+                    document.getElementById('randomMaxMs').value = data.random_max_ms || 200;
+                    showSleepMessage(`✓ Retrieved sleep config from PROCR (port ${port})`, false);
+                })
+                .catch(error => {
+                    showSleepMessage(`✗ Failed to get config: ${error.message}`, true);
+                    console.error('Error:', error);
+                });
+        }
+        
+        function setSleepConfig() {
+            const port = document.getElementById('procrPort').value || '8080';
+            const url = `http://localhost:${port}/config/sleep`;
+            
+            const payload = {
+                fixed_ms: parseInt(document.getElementById('fixedMs').value) || 0,
+                random_min_ms: parseInt(document.getElementById('randomMinMs').value) || 0,
+                random_step_ms: parseInt(document.getElementById('randomStepMs').value) || 100,
+                random_max_ms: parseInt(document.getElementById('randomMaxMs').value) || 200
+            };
+            
+            fetch(url, {
+                method: 'POST',
+                mode: 'cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            })
+                .then(response => {
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    return response.json();
+                })
+                .then(data => {
+                    showSleepMessage(`✓ Sleep config updated on PROCR (port ${port})`, false);
+                    // Also update fields to reflect server response
+                    document.getElementById('fixedMs').value = data.fixed_ms || 0;
+                    document.getElementById('randomMinMs').value = data.random_min_ms || 0;
+                    document.getElementById('randomStepMs').value = data.random_step_ms || 100;
+                    document.getElementById('randomMaxMs').value = data.random_max_ms || 200;
+                })
+                .catch(error => {
+                    showSleepMessage(`✗ Failed to update config: ${error.message}`, true);
+                    console.error('Error:', error);
+                });
+        }
+    </script>
+</body>
+</html>

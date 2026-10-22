@@ -1,0 +1,37 @@
+#!/bin/bash
+
+# Central Server Run Script
+# Launches Central transaction server with structured logging
+# Logging: ./log/central/yyyy/MMM/dd/central-yyyyMMdd-HHmmss-i.log (5MB rollover, no compression)
+# Port: 5000 (or override with PORT env var)
+
+set -e
+
+PORT="${PORT:-5000}"
+JAR_FILE="target/central-transaction-server-1.0.0.jar"
+
+# Validate JAR exists
+if [ ! -f "$JAR_FILE" ]; then
+    echo "❌ Error: JAR file not found at $JAR_FILE"
+    echo "Please run: cd central && ./build"
+    exit 1
+fi
+
+# Create log directory
+mkdir -p log/central
+
+echo "🚀 Starting Central Server (port $PORT)"
+echo "📁 Logging to: ./log/central/yyyy/MMM/dd/"
+echo ""
+
+# Launch with Java - logback-spring.xml auto-loaded from classpath
+java \
+    -Dspring.profiles.active=production \
+    -Dserver.port="$PORT" \
+    -Dlogging.config="classpath:logback-spring.xml" \
+    -jar "$JAR_FILE"
+
+echo "✅ Central Server stopped"
+
+
+
