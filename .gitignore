@@ -1,0 +1,89 @@
+# Maven and Build
+target/
+*.jar
+*.class
+*.classpath
+*.project
+.classpath
+.project
+.settings/
+*.log
+build/
+dist/
+*.war
+*.ear
+
+# IDE
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+.DS_Store
+*.swp
+*.swo
+*~
+.vim/
+.metals/
+
+# Gradle
+.gradle/
+gradle/
+
+# Node (if any frontend builds)
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# Python (if any scripts)
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.env
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
+.gitkeep
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.bak
+*.swp
+*~
+.tmp/
+
+# Runtime
+.run/
+.vscode/launch.json
+
+# Test coverage
+coverage/
+.coverage
+htmlcov/
+
+# Application runtime
+application-local.properties
+application-dev.properties
+application-prod.properties
+
+# Secrets (never commit)
+.env
+.env.local
+*.pem
+*.key
+secrets.yml
+
+# Session files
+session-state/

@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transaction Server - Requirements Specification</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 10px;
+        }
+        h3 {
+            color: #555;
+            margin-top: 20px;
+        }
+        .requirement {
+            background: white;
+            border-left: 4px solid #27ae60;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .requirement.critical {
+            border-left-color: #e74c3c;
+            background: #fadbd8;
+        }
+        .requirement.important {
+            border-left-color: #f39c12;
+            background: #fef5e7;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        table th {
+            background: #34495e;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: bold;
+        }
+        table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #ddd;
+        }
+        table tr:hover {
+            background: #f8f9fa;
+        }
+        .code-block {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+        }
+        ul, ol {
+            margin: 10px 0;
+            padding-left: 30px;
+        }
+        li {
+            margin: 8px 0;
+        }
+        .section-highlight {
+            background: #ecf0f1;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 15px 0;
+        }
+        .flow-diagram {
+            background: white;
+            border: 1px solid #bdc3c7;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        .label {
+            display: inline-block;
+            padding: 4px 8px;
+            margin: 2px;
+            border-radius: 3px;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+        .label.java {
+            background: #f89820;
+            color: white;
+        }
+        .label.springboot {
+            background: #6db33f;
+            color: white;
+        }
+        .label.network {
+            background: #0066cc;
+            color: white;
+        }
+        .note {
+            background: #d5f4e6;
+            border-left: 4px solid #1abc9c;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 3px;
+        }
+        .warning {
+            background: #fcf8e3;
+            border-left: 4px solid #f39c12;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Transaction Server Application - Requirements Specification</h1>
+
+<div class="section-highlight">
+    <strong>Project:</strong> Central Transaction Server<br>
+    <strong>Technology Stack:</strong> 
+    <span class="label java">Java</span>
+    <span class="label springboot">Spring Boot</span>
+    <span class="label network">TCP Socket</span><br>
+    <strong>Document Version:</strong> 1.0<br>
+    <strong>Last Updated:</strong> October 22, 2026
+</div>
+
+<h2>1. Overview</h2>
+
+<div class="requirement critical">
+    The application shall be a Java Spring Boot server that accepts TCP socket connections from a single client at a time. 
+    The server will send transaction messages to the connected client and receive transaction acknowledgments. 
+    The server manages session lifecycle (session start/end) and maintains transaction queues during active sessions.
+</div>
+
+<h2>2. Network Architecture</h2>
+
+<div class="requirement">
+    <strong>REQ-NET-001: TCP Port Listening</strong><br>
+    The application shall listen on a configurable TCP port (default: 5000 or configurable via application properties). 
+    The server shall accept incoming TCP socket connections.
+</div>
+
+<div class="requirement">
+    <strong>REQ-NET-002: Single Client Connection</strong><br>
+    The server shall accept and maintain only ONE active client connection at any given time. 
+    If a new connection attempt arrives while a client is already connected, the new connection shall be rejected or queued.
+</div>
+
+<div class="requirement critical">
+    <strong>REQ-NET-003: Graceful Disconnection Handling</strong><br>
+    Upon client disconnection or connection termination:
+    <ul>
+        <li>All pending transactions shall be immediately dropped (no persistence or retry)</li>
+        <li>All session state shall be cleared</li>
+        <li>The server shall be ready to accept a new connection</li>
+        <li>The next client connection must explicitly send a new SESSION_START message</li>
+    </ul>
+</div>
+
+<h2>3. Threading Architecture</h2>
+
+<div class="requirement critical">
+    <strong>REQ-THREAD-001: Thread Pool Design</strong><br>
+    The server shall use a queue-based multi-threaded architecture to safely decouple transaction generation, 
+    transmission, and response handling:
+    <ul>
+        <li><strong>Sender Pool (2 threads):</strong> Generate transactions and publish to OutgoingQueue</li>
+        <li><strong>TCP Writer (1 thread):</strong> Read from OutgoingQueue and write to TCP socket</li>
+        <li><strong>TCP Reader (1 thread):</strong> Read from TCP socket and publish to IncomingQueue</li>
+        <li><strong>Receiver Pool (2 threads):</strong> Process acknowledgments from IncomingQueue and update cache</li>
+        <li><strong>Shared Cache:</strong> Thread-safe in-memory store for pending transactions (key: txn_id, value: txn details)</li>
+    </ul>
+</div>
+
+<div class="code-block">
+Architecture Diagram:
+┌─────────────────────────────────────────────────────────────┐
+│                    Central Server                           │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Sender Pool (2)          OutgoingQueue          TCP Writer │
+│  ┌──────────────┐         ┌──────────┐         ┌──────────┐ │
+│  │ Generate Txn │ ──────→ │ Txn Data │ ──────→ │ Socket   │ │
+│  │      (1)     │         │  Queue   │         │ Write    │ │
+│  └──────────────┘         └──────────┘         └──────────┘ │
+│  ┌──────────────┐                                    ↕      │
+│  │ Generate Txn │                              TCP Socket   │
+│  │      (2)     │                                    ↕      │
+│  └──────────────┘         ┌──────────┐         ┌──────────┐ │
+│                           │ Ack Data │ ←────── │ Socket   │ │
+│  Receiver Pool (2)        │  Queue   │         │ Read     │ │
+│  ┌──────────────┐         └──────────┘         └──────────┘ │
+│  │ Process Ack  │ ←─────┐                       TCP Reader  │
+│  │   & Cache    │       └─────────────────────────────────┘ │
+│  └──────────────┘                                            │
+│  ┌──────────────┐                                            │
+│  │ Process Ack  │                                            │
+│  │   & Cache    │      ┌──────────────────────┐              │
+│  └──────────────┘      │  Shared Transaction  │              │
+│                        │  Cache (Thread-Safe) │              │
+│                        │  Pending Txns        │              │
+│                        │  (TTL: 9 sec)        │              │
+│                        └──────────────────────┘              │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+</div>
+
+<div class="requirement">
+    <strong>REQ-THREAD-002: Sender Pool Behavior</strong><br>
+    <ul>
+        <li>Two sender threads work independently to generate transactions</li>
+        <li>Each sender respects the session state (active/inactive)</li>
+        <li>Senders publish generated transactions to OutgoingQueue (thread-safe blocking queue)</li>
+        <li>Senders also store transaction in shared Cache with TTL (default: 9 seconds)</li>
+        <li>If OutgoingQueue is full, senders block until space is available (backpressure)</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-THREAD-003: TCP Writer Thread Behavior</strong><br>
+    <ul>
+        <li>Single TCP writer ensures no concurrent writes to socket (thread-safe)</li>
+        <li>Blocks on OutgoingQueue waiting for transactions</li>
+        <li>Upon receiving transaction: serialize to JSON and write to TCP socket</li>
+        <li>Each message ends with newline for line-based parsing by Adapter</li>
+        <li>Handle network errors: close socket, log error, transition to DISCONNECTED state</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-THREAD-004: TCP Reader Thread Behavior</strong><br>
+    <ul>
+        <li>Single TCP reader ensures no concurrent reads from socket (thread-safe)</li>
+        <li>Blocks on socket read waiting for acknowledgments (from Adapter in JSON format)</li>
+        <li>Upon receiving acknowledgment: deserialize JSON and publish to IncomingQueue</li>
+        <li>Adapter converts PROCR YAML responses back to JSON for Central to consume</li>
+        <li>Handle network errors: close socket, log error, transition to DISCONNECTED state</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-THREAD-005: Receiver Pool Behavior</strong><br>
+    <ul>
+        <li>Two receiver threads process acknowledgments independently</li>
+        <li>Receivers block on IncomingQueue waiting for acknowledgments</li>
+        <li>Upon receiving acknowledgment: update cache to mark transaction as acknowledged</li>
+        <li>Log the acknowledgment with timestamp and transaction details</li>
+        <li>Remove transaction from cache (cleanup)</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-THREAD-006: Shared Cache Management</strong><br>
+    <ul>
+        <li>Cache implementation: ConcurrentHashMap or similar thread-safe map</li>
+        <li>Key: txn_id (String), Value: Transaction object + timestamp</li>
+        <li>TTL enforcement: Background cleanup task removes entries older than 9 seconds</li>
+        <li>TTL timeout indicates adapter did not respond within timeout window</li>
+        <li>On disconnect: clear all pending transactions from cache</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-THREAD-007: Queue Specifications</strong><br>
+    <ul>
+        <li><strong>OutgoingQueue:</strong> BlockingQueue&lt;Transaction&gt;, capacity: 100 (configurable)</li>
+        <li><strong>IncomingQueue:</strong> BlockingQueue&lt;Acknowledgment&gt;, capacity: 100 (configurable)</li>
+        <li>Both queues use fair FIFO ordering</li>
+        <li>Queues automatically cleared on SESSION_END → DISCONNECTED transition</li>
+    </ul>
+</div>
+
+<h2>4. Message Protocol</h2>
+
+<h3>3.1 Message Types</h3>
+
+<table>
+    <tr>
+        <th>Message Type</th>
+        <th>Direction</th>
+        <th>Description</th>
+    </tr>
+    <tr>
+        <td>SESSION_START</td>
+        <td>Client → Server</td>
+        <td>Initiates a session; server starts sending transactions</td>
+    </tr>
+    <tr>
+        <td>SESSION_END</td>
+        <td>Client → Server</td>
+        <td>Terminates a session; server stops sending new transactions but waits for pending acknowledgments</td>
+    </tr>
+    <tr>
+        <td>TRANSACTION</td>
+        <td>Server → Client</td>
+        <td>Sends a transaction with complete details (see Section 3.3)</td>
+    </tr>
+    <tr>
+        <td>TXN_ACKNOWLEDGE</td>
+        <td>Client → Server</td>
+        <td>Acknowledgment of received transaction</td>
+    </tr>
+</table>
+
+<h3>3.2 Session Management</h3>
+
+<div class="requirement important">
+    <strong>REQ-MSG-001: Session Start</strong><br>
+    When client sends SESSION_START message:
+    <ul>
+        <li>Server shall transition to ACTIVE session state</li>
+        <li>Server shall begin sending transactions (as per Section 4)</li>
+        <li>Server shall log session start event with timestamp</li>
+    </ul>
+</div>
+
+<div class="requirement important">
+    <strong>REQ-MSG-002: Session End</strong><br>
+    When client sends SESSION_END message:
+    <ul>
+        <li>Server shall transition to INACTIVE session state</li>
+        <li>Server shall STOP sending new transactions immediately</li>
+        <li>Server shall CONTINUE waiting for acknowledgments of previously sent transactions</li>
+        <li>Server shall log session end event with timestamp</li>
+        <li>All received transaction acknowledgments shall still be logged</li>
+    </ul>
+</div>
+
+<div class="requirement critical">
+    <strong>REQ-MSG-003: Transaction Lifecycle with Disconnection</strong><br>
+    <ul>
+        <li>During ACTIVE session: Server sends transactions and waits for acknowledgments</li>
+        <li>After SESSION_END but before disconnection: Server waits for pending transaction acknowledgments</li>
+        <li>Upon connection loss: All remaining pending transactions are immediately discarded</li>
+    </ul>
+</div>
+
+<h3>3.3 Transaction Message Format</h3>
+
+<div class="requirement critical">
+    <strong>REQ-MSG-004: Transaction Message Structure</strong><br>
+    Each transaction message shall contain the following fields:
+</div>
+
+<table>
+    <tr>
+        <th>Field</th>
+        <th>Data Type</th>
+        <th>Description</th>
+        <th>Format/Constraints</th>
+    </tr>
+    <tr>
+        <td>Message ID</td>
+        <td>String</td>
+        <td>Unique identifier for this transaction (TXN number)</td>
+        <td>Alphanumeric, e.g., "TXN-001234"</td>
+    </tr>
+    <tr>
+        <td>STAN</td>
+        <td>String</td>
+        <td>System Trace Audit Number</td>
+        <td>6-12 digit numeric string</td>
+    </tr>
+    <tr>
+        <td>Transaction Type</td>
+        <td>String (Enum)</td>
+        <td>Type of transaction</td>
+        <td>One of: T1, T2, S1</td>
+    </tr>
+    <tr>
+        <td>Narration</td>
+        <td>String</td>
+        <td>Transaction description</td>
+        <td>Sensible, pre-defined per transaction type (see Section 3.4)</td>
+    </tr>
+    <tr>
+        <td>Quantity</td>
+        <td>Integer</td>
+        <td>Number of items</td>
+        <td>Positive integer, e.g., 1-100</td>
+    </tr>
+    <tr>
+        <td>Rate</td>
+        <td>Decimal</td>
+        <td>Price per unit</td>
+        <td>Decimal with 2 decimal places, e.g., 99.99</td>
+    </tr>
+    <tr>
+        <td>Taxes</td>
+        <td>Decimal</td>
+        <td>Tax amount (10% fixed)</td>
+        <td>Calculated as: (Quantity × Rate) × 0.10</td>
+    </tr>
+    <tr>
+        <td>Total</td>
+        <td>Decimal</td>
+        <td>Total amount</td>
+        <td>Calculated as: (Quantity × Rate) + Taxes</td>
+    </tr>
+    <tr>
+        <td>Timestamp</td>
+        <td>DateTime</td>
+        <td>Transaction creation time</td>
+        <td>ISO 8601 format, e.g., "2026-10-22T23:08:41Z"</td>
+    </tr>
+</table>
+
+<h3>3.4 Narration Pool</h3>
+
+<div class="requirement">
+    <strong>REQ-MSG-005: Pre-defined Narrations</strong><br>
+    The server shall maintain a pool of pre-defined narrations for each transaction type. 
+    For each transaction, the server shall randomly select one narration from the corresponding type pool.
+</div>
+
+<table>
+    <tr>
+        <th>Transaction Type</th>
+        <th colspan="3">Narrations (Pick one randomly)</th>
+    </tr>
+    <tr>
+        <td><strong>T1</strong></td>
+        <td>Purchase of Office Supplies</td>
+        <td>Sales Order Fulfillment</td>
+        <td>Inventory Replenishment - Books</td>
+    </tr>
+    <tr>
+        <td><strong>T2</strong></td>
+        <td>Software License Renewal</td>
+        <td>Hardware Maintenance Contract</td>
+        <td>Professional Consultation Services</td>
+    </tr>
+    <tr>
+        <td><strong>S1</strong></td>
+        <td>Customer Refund Processing</td>
+        <td>Payment for Returned Merchandise</td>
+        <td>Settlement of Service Credit</td>
+    </tr>
+</table>
+
+<h2>5. Transaction Generation and Timing</h2>
+
+<div class="requirement important">
+    <strong>REQ-TXN-001: Transaction Generation Rate</strong><br>
+    <ul>
+        <li>The server shall generate and send 4 transactions every 10 seconds (400 ms per transaction on average)</li>
+        <li>Transactions shall be RANDOMLY distributed across the 10-second window (not evenly spaced)</li>
+        <li>Each transaction shall be sent only when a session is ACTIVE</li>
+        <li>No transactions shall be sent after SESSION_END is received until a new SESSION_START arrives</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-TXN-002: Random Timing Implementation</strong><br>
+    <ul>
+        <li>Calculate a random delay between 0-10000 milliseconds at the start of each 10-second window</li>
+        <li>Send transactions at random intervals within this window</li>
+        <li>Ensure 4 transactions fit within the window with appropriate spacing</li>
+        <li>Example: Send at T=150ms, T=2400ms, T=5800ms, T=8300ms</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-TXN-003: Transaction Data Randomization</strong><br>
+    For each transaction:
+    <ul>
+        <li>Randomly select a transaction type (T1, T2, or S1) with equal probability (33.3% each)</li>
+        <li>Randomly select a narration from the 3 narrations for the chosen type</li>
+        <li>Generate a random STAN (6-12 digit string)</li>
+        <li>Generate a random Quantity (1-100)</li>
+        <li>Generate a random Rate (10.00-999.99)</li>
+        <li>Calculate Taxes as: (Quantity × Rate) × 0.10</li>
+        <li>Calculate Total as: (Quantity × Rate) + Taxes</li>
+        <li>Assign sequential TXN number (TXN-001, TXN-002, etc.)</li>
+    </ul>
+</div>
+
+<h2>6. Transaction Acknowledgment Flow</h2>
+
+<div class="requirement">
+    <strong>REQ-ACK-001: Acknowledgment Processing</strong><br>
+    Upon receiving a TXN_ACKNOWLEDGE message from the client:
+    <ul>
+        <li>Server shall log the acknowledgment with transaction ID and timestamp</li>
+        <li>Server shall record the acknowledgment status (received/processed)</li>
+        <li>No persistence or special handling is required; acknowledgment is for logging only</li>
+    </ul>
+</div>
+
+<div class="requirement important">
+    <strong>REQ-ACK-002: Acknowledgment Wait Period</strong><br>
+    <ul>
+        <li>After SESSION_END is received, the server shall continue accepting and logging acknowledgments</li>
+        <li>Server shall wait indefinitely for acknowledgments of sent transactions (until connection closes)</li>
+        <li>No timeout mechanism for acknowledgments is required</li>
+        <li>Upon connection loss, all unacknowledged transactions are immediately discarded</li>
+    </ul>
+</div>
+
+<h2>7. Logging and Monitoring</h2>
+
+<div class="requirement">
+    <strong>REQ-LOG-001: Event Logging</strong><br>
+    The server shall log the following events:
+    <ul>
+        <li><strong>Server Startup:</strong> Application started, listening on port [PORT]</li>
+        <li><strong>Client Connected:</strong> Client connection established from [IP:PORT]</li>
+        <li><strong>Session Start:</strong> SESSION_START received at [TIMESTAMP]</li>
+        <li><strong>Transaction Sent:</strong> TXN-[ID] sent to client (Type: [TYPE], STAN: [STAN], Amount: [TOTAL])</li>
+        <li><strong>Acknowledgment Received:</strong> TXN_ACK received for TXN-[ID] at [TIMESTAMP]</li>
+        <li><strong>Session End:</strong> SESSION_END received at [TIMESTAMP], waiting for pending acknowledgments</li>
+        <li><strong>Client Disconnected:</strong> Connection closed, [N] pending transactions dropped</li>
+        <li><strong>New Session Ready:</strong> Server ready to accept new connection and SESSION_START</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-LOG-002: Log Format</strong><br>
+    All logs shall include:
+    <ul>
+        <li>Timestamp (ISO 8601 format)</li>
+        <li>Log Level (INFO, WARN, ERROR)</li>
+        <li>Component/Class name</li>
+        <li>Message with relevant context</li>
+    </ul>
+    Example: <span class="code-block">[2026-10-22T23:08:41.400+05:30] INFO TransactionService - TXN-001234 sent (T1, STAN: 123456, Amount: 1100.00)</span>
+</div>
+
+<h2>8. Application State Machine</h2>
+
+<div class="flow-diagram">
+    <strong>Server State Transitions:</strong><br><br>
+    <strong>DISCONNECTED</strong><br>
+    └─ (Client connects)<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;↓<br>
+    <strong>CONNECTED (Waiting for SESSION_START)</strong><br>
+    └─ (Receive SESSION_START)<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;↓<br>
+    <strong>ACTIVE (Sending Transactions)</strong><br>
+    └─ (Receive SESSION_END)<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;↓<br>
+    <strong>INACTIVE (Waiting for Acknowledgments)</strong><br>
+    └─ (Client disconnects)<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;↓<br>
+    <strong>DISCONNECTED</strong><br>
+</div>
+
+<h2>9. Error Handling and Edge Cases</h2>
+
+<div class="requirement important">
+    <strong>REQ-ERR-001: Malformed Messages</strong><br>
+    <ul>
+        <li>If a message received from the client is malformed or unrecognized, log a warning and ignore it</li>
+        <li>Do not crash the server; maintain the connection</li>
+    </ul>
+</div>
+
+<div class="requirement important">
+    <strong>REQ-ERR-002: Session Start During Active Session</strong><br>
+    <ul>
+        <li>If SESSION_START is received while a session is already ACTIVE, log a warning and ignore it</li>
+        <li>Continue with the current active session</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-ERR-003: Socket Read/Write Errors</strong><br>
+    <ul>
+        <li>If any I/O error occurs during socket communication, immediately close the connection</li>
+        <li>Log the error and transition to DISCONNECTED state</li>
+        <li>Drop all pending transactions</li>
+        <li>Prepare for a new client connection</li>
+    </ul>
+</div>
+
+<h2>10. Configuration Requirements</h2>
+
+<div class="requirement">
+    <strong>REQ-CFG-001: Application Properties</strong><br>
+    The following properties shall be configurable via <code>application.properties</code> or environment variables:
+    <ul>
+        <li><strong>server.port:</strong> TCP port number (default: 5000)</li>
+        <li><strong>txn.rate.interval:</strong> Interval between transaction batches in milliseconds (default: 10000)</li>
+        <li><strong>txn.rate.count:</strong> Number of transactions per batch (default: 4)</li>
+        <li><strong>txn.batch.random:</strong> Enable random spacing within batch (default: true)</li>
+    </ul>
+</div>
+
+<h2>11. Performance and Scalability</h2>
+
+<div class="requirement">
+    <strong>REQ-PERF-001: Thread Pool Sizing</strong><br>
+    <ul>
+        <li>Sender Pool: 2 threads (configurable)</li>
+        <li>TCP Writer: 1 dedicated thread</li>
+        <li>TCP Reader: 1 dedicated thread</li>
+        <li>Receiver Pool: 2 threads (configurable)</li>
+        <li>Total: 6 threads minimum for baseline operation</li>
+        <li>Thread pool size adjustable via configuration for different load profiles</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-PERF-002: Memory Efficiency</strong><br>
+    <ul>
+        <li>Pending transactions held in shared cache (ConcurrentHashMap)</li>
+        <li>Queue capacity: 100 per queue (configurable)</li>
+        <li>TTL-based cleanup: transactions expire after 9 seconds</li>
+        <li>Upon disconnection: all queues and cache cleared immediately</li>
+        <li>No long-term storage of transaction history required</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-PERF-003: Backpressure Handling</strong><br>
+    <ul>
+        <li>Sender threads block if OutgoingQueue reaches capacity</li>
+        <li>This natural backpressure prevents memory exhaustion</li>
+        <li>Receiver threads block if IncomingQueue is empty</li>
+        <li>Non-blocking I/O handled by dedicated TCP threads</li>
+    </ul>
+</div>
+
+<h2>12. Testing Considerations</h2>
+
+<div class="section-highlight">
+    <strong>Testing Strategy (Not a formal requirement, but recommended):</strong>
+    <ul>
+        <li><strong>Unit Tests:</strong> Test transaction generation logic, rate calculation, narration selection</li>
+        <li><strong>Integration Tests:</strong> Test socket communication, session lifecycle, message parsing</li>
+        <li><strong>Manual Testing:</strong> Use telnet or a custom client to verify protocol compliance</li>
+        <li><strong>Load Testing:</strong> Verify correct behavior with continuous connection/disconnection cycles</li>
+    </ul>
+</div>
+
+<h2>13. Non-Functional Requirements</h2>
+
+<div class="requirement">
+    <strong>REQ-NFR-001: Reliability</strong><br>
+    The application shall not lose transaction acknowledgments that have been sent by the client before disconnection.
+    Once an acknowledgment is received, it shall be logged and shall not be lost.
+</div>
+
+<div class="requirement">
+    <strong>REQ-NFR-002: Graceful Shutdown</strong><br>
+    When the Spring Boot application is shut down:
+    <ul>
+        <li>The active client connection (if any) shall be closed gracefully</li>
+        <li>All pending transactions shall be discarded</li>
+        <li>All logs shall be flushed</li>
+        <li>Application shall exit cleanly</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-NFR-003: Code Quality</strong><br>
+    <ul>
+        <li>Follow Spring Boot best practices and conventions</li>
+        <li>Use dependency injection for service components</li>
+        <li>Implement proper exception handling</li>
+        <li>Include JavaDoc comments for public APIs</li>
+        <li>Use meaningful class and method names</li>
+    </ul>
+</div>
+
+<h2>14. Summary of Key Behaviors</h2>
+
+<table>
+    <tr>
+        <th>Scenario</th>
+        <th>Expected Behavior</th>
+    </tr>
+    <tr>
+        <td>Client connects</td>
+        <td>Server accepts connection, logs event, waits for SESSION_START</td>
+    </tr>
+    <tr>
+        <td>Client sends SESSION_START</td>
+        <td>Server transitions to ACTIVE, begins sending transactions every 10 seconds (4 txns with random spacing)</td>
+    </tr>
+    <tr>
+        <td>Server sends transaction</td>
+        <td>Server logs transaction details (TXN ID, STAN, Type, Amount) and waits for acknowledgment</td>
+    </tr>
+    <tr>
+        <td>Client sends TXN_ACKNOWLEDGE</td>
+        <td>Server logs acknowledgment, continues sending transactions</td>
+    </tr>
+    <tr>
+        <td>Client sends SESSION_END</td>
+        <td>Server stops sending new transactions, continues waiting for pending acknowledgments</td>
+    </tr>
+    <tr>
+        <td>All acknowledgments received (after SESSION_END)</td>
+        <td>Server remains idle, ready for client to send new SESSION_START or close connection</td>
+    </tr>
+    <tr>
+        <td>Client disconnects</td>
+        <td>Server drops all pending transactions, clears session state, logs event, waits for new connection</td>
+    </tr>
+    <tr>
+        <td>New client connects</td>
+        <td>Process repeats from beginning; new client must send SESSION_START</td>
+    </tr>
+</table>
+
+<div class="note">
+    <strong>Note:</strong> This requirements document provides a complete functional specification for the Transaction Server application. 
+    Implementation shall follow these requirements strictly to ensure correct behavior, especially regarding session lifecycle management and transaction flow control.
+</div>
+
+</body>
+</html>

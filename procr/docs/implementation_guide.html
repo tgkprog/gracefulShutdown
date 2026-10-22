@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PROCR - Implementation Guide</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #3498db;
+            padding-left: 10px;
+        }
+        h3 {
+            color: #555;
+            margin-top: 20px;
+        }
+        .code-block {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        .example {
+            background: #ecf0f1;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 15px 0;
+            border-left: 4px solid #2ecc71;
+        }
+        .warning {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 15px 0;
+            border-left: 4px solid #ffc107;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        table th {
+            background: #34495e;
+            color: white;
+            padding: 12px;
+            text-align: left;
+        }
+        table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #ddd;
+        }
+        table tr:hover {
+            background: #f8f9fa;
+        }
+        ul, ol {
+            margin: 10px 0;
+            padding-left: 30px;
+        }
+        li {
+            margin: 8px 0;
+        }
+        .formula {
+            background: #e8f4f8;
+            padding: 10px;
+            border-left: 3px solid #3498db;
+            font-family: 'Courier New', monospace;
+            margin: 10px 0;
+        }
+        .flow {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+        }
+    </style>
+</head>
+<body>
+
+<h1>PROCR Service - Implementation Guide</h1>
+<p><em>Clear explanation of all processing requirements, with focus on "Response Delay Before Sending"</em></p>
+
+<h2>1. Processing Overview</h2>
+
+<p>The PROCR service receives transactions from Central, processes them with a random approval decision, applies a configurable delay, logs the actions, and sends a response back.</p>
+
+<div class="flow">
+Request Received (from Central)
+    ↓
+Generate Random Approval Decision (1-100)
+    ↓
+Log Decision
+    ↓
+Calculate Sleep Duration
+    ↓
+Log Calculated Delay
+    ↓
+Sleep for Calculated Duration
+    ↓
+Log Sleep Completion
+    ↓
+Send Response to Central
+</div>
+
+<h2>2. Approval Decision Algorithm (REQ-PROC-LOGIC-001)</h2>
+
+<h3>Step 1: Generate Random Decision</h3>
+<ul>
+    <li>Generate a random integer from 1 to 100 (inclusive)</li>
+    <li>If 1-99: Decision = <strong>APPROVE</strong> (99% success rate)</li>
+    <li>If 100: Decision = <strong>REJECT</strong> (1% rejection rate)</li>
+    <li>Decision is deterministic for a single request (no change once made)</li>
+</ul>
+
+<div class="example">
+<strong>Example:</strong>
+<ul>
+    <li>Random = 45 → APPROVE (success)</li>
+    <li>Random = 100 → REJECT (failure)</li>
+    <li>Random = 1 → APPROVE (success)</li>
+</ul>
+</div>
+
+<h2>3. Response Delay Before Sending (NEW - CLARIFIED)</h2>
+
+<p><strong>Purpose:</strong> Simulate real-world processing delays. The processor will wait before responding to simulate network latency or backend processing time.</p>
+
+<h3>Sleep Duration Formula</h3>
+
+<div class="formula">
+sleep_ms = fixed_delay + random_value
+</div>
+
+<p><strong>Where:</strong></p>
+<ul>
+    <li><code>fixed_delay</code>: Base delay applied to every response (in milliseconds)</li>
+    <li><code>random_value</code>: Additional random delay selected from a range (in milliseconds)</li>
+</ul>
+
+<h3>Random Value Calculation</h3>
+
+<p>The random value is generated from a set of equally-spaced values:</p>
+
+<div class="formula">
+Possible values: [min_random, min_random+step, min_random+2*step, ..., max_random]
+</div>
+
+<p><strong>Parameters:</strong></p>
+<ul>
+    <li><code>min_random</code>: Minimum random value (in milliseconds)</li>
+    <li><code>step</code>: Increment between possible values (in milliseconds)</li>
+    <li><code>max_random</code>: Maximum random value (in milliseconds)</li>
+</ul>
+
+<h3>Concrete Example #1: Default Configuration</h3>
+
+<table>
+<tr>
+    <th>Parameter</th>
+    <th>Value</th>
+    <th>Description</th>
+</tr>
+<tr>
+    <td>fixed_delay</td>
+    <td>0 ms</td>
+    <td>No base delay</td>
+</tr>
+<tr>
+    <td>min_random</td>
+    <td>0 ms</td>
+    <td>Random starts from 0</td>
+</tr>
+<tr>
+    <td>step</td>
+    <td>100 ms</td>
+    <td>Increment by 100ms each</td>
+</tr>
+<tr>
+    <td>max_random</td>
+    <td>200 ms</td>
+    <td>Random goes up to 200</td>
+</tr>
+</table>
+
+<p><strong>Calculation:</strong></p>
+
+<div class="code-block">
+Possible random values: [0, 100, 200]
+(starts at 0, increments by 100, stops at 200)
+
+Processor randomly selects one:
+  - 0 ms (33% chance)
+  - 100 ms (33% chance)
+  - 200 ms (33% chance)
+
+Total sleep = 0 (fixed) + {0 or 100 or 200} (random)
+            = 0, 100, or 200 ms (equal probability)
+</div>
+
+<h3>Concrete Example #2: Custom Configuration</h3>
+
+<table>
+<tr>
+    <th>Parameter</th>
+    <th>Value</th>
+    <th>Description</th>
+</tr>
+<tr>
+    <td>fixed_delay</td>
+    <td>1000 ms</td>
+    <td>Always wait 1 second first</td>
+</tr>
+<tr>
+    <td>min_random</td>
+    <td>100 ms</td>
+    <td>Random starts from 100</td>
+</tr>
+<tr>
+    <td>step</td>
+    <td>100 ms</td>
+    <td>Increment by 100ms each</td>
+</tr>
+<tr>
+    <td>max_random</td>
+    <td>1000 ms</td>
+    <td>Random goes up to 1000</td>
+</tr>
+</table>
+
+<p><strong>Calculation:</strong></p>
+
+<div class="code-block">
+Possible random values: [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
+(starts at 100, increments by 100, stops at 1000)
+
+Processor randomly selects one (10% each):
+  - 100 ms
+  - 200 ms
+  - 300 ms
+  - ... (continues)
+  - 1000 ms
+
+Total sleep = 1000 (fixed) + {100 to 1000 in steps of 100} (random)
+            = 1100 to 2000 ms (10 possible values, equal probability)
+</div>
+
+<h2>4. Logging Requirements</h2>
+
+<p>The processor must log at multiple stages:</p>
+
+<div class="flow">
+1. Log the approval decision (APPROVE or REJECT)
+2. Log the calculated sleep duration (e.g., "Sleeping for 150 ms")
+3. Log sleep completion (e.g., "Sleep completed after 150 ms")
+4. Log the response being sent
+</div>
+
+<p><strong>Example Log Output:</strong></p>
+
+<div class="code-block">
+[2024-10-23 12:34:56] Processing transaction TXN-123456
+[2024-10-23 12:34:56] Decision: APPROVE (random=45)
+[2024-10-23 12:34:56] Calculated sleep duration: 150 ms
+[2024-10-23 12:34:56] Starting sleep...
+[2024-10-23 12:34:56] Sleep completed after 150 ms
+[2024-10-23 12:34:56] Sending APPROVE response to Central
+</div>
+
+<h2>5. Configuration via application.properties</h2>
+
+<p>All delay parameters should be configurable:</p>
+
+<div class="code-block">
+# Response Delay Configuration (in milliseconds)
+procr.response.delay.fixed=0
+procr.response.delay.min_random=0
+procr.response.delay.step=100
+procr.response.delay.max_random=200
+</div>
+
+<p><strong>Notes:</strong></p>
+<ul>
+    <li>All values are in milliseconds</li>
+    <li>Set fixed=0 for no base delay</li>
+    <li>Set min_random=max_random=0 to disable random delay entirely</li>
+    <li>step must be a positive integer dividing the range evenly</li>
+</ul>
+
+<h2>6. Rejection Reasons (REQ-PROC-LOGIC-002)</h2>
+
+<p>When a transaction is REJECTED (random = 100), select one of these reasons with equal probability:</p>
+
+<table>
+<tr>
+    <th>Reason</th>
+    <th>Probability</th>
+    <th>Meaning</th>
+</tr>
+<tr>
+    <td>Insufficient Funds</td>
+    <td>33.3%</td>
+    <td>Account balance too low</td>
+</tr>
+<tr>
+    <td>Card Closed</td>
+    <td>33.3%</td>
+    <td>Card is no longer valid</td>
+</tr>
+<tr>
+    <td>Network Down</td>
+    <td>33.3%</td>
+    <td>Temporary network issue</td>
+</tr>
+</table>
+
+<div class="example">
+<strong>Example Rejection:</strong>
+<ul>
+    <li>Random = 100 → REJECT</li>
+    <li>Random reason selector = 2 → "Card Closed"</li>
+    <li>Log: "Decision: REJECT (reason: Card Closed)"</li>
+</ul>
+</div>
+
+<h2>7. Response Format</h2>
+
+<h3>Success Response (APPROVE)</h3>
+
+<div class="code-block">
+response_type: APPROVE
+txn_id: TXN-123456
+status: SUCCESS
+message: Transaction approved successfully
+timestamp: 2024-10-23T12:34:56Z
+</div>
+
+<h3>Failure Response (REJECT)</h3>
+
+<div class="code-block">
+response_type: REJECT
+txn_id: TXN-123456
+status: FAILED
+reason: Card Closed
+message: Transaction rejected - Card Closed
+timestamp: 2024-10-23T12:34:56Z
+</div>
+
+<h2>8. Processing Determinism (REQ-PROC-LOGIC-003)</h2>
+
+<ul>
+    <li><strong>No State:</strong> Each request is processed independently</li>
+    <li><strong>No History:</strong> No transaction history is maintained</li>
+    <li><strong>Independent:</strong> Concurrent requests have independent outcomes</li>
+    <li><strong>Deterministic:</strong> Same random seed produces same results (if needed for testing)</li>
+</ul>
+
+<div class="warning">
+<strong>Important:</strong> Each time PROCR receives a request for the same transaction, it will generate a NEW random decision. There is no caching or state preservation between requests.
+</div>
+
+<h2>9. API Endpoints</h2>
+
+<h3>GET /health</h3>
+<p><strong>Purpose:</strong> Health check (returns YAML)</p>
+
+<div class="code-block">
+Request:  GET /health
+Response: 200 OK
+Content-Type: application/x-yaml
+
+status: UP
+version: 1.0.0
+timestamp: 2024-10-23T12:34:56Z
+</div>
+
+<h3>POST /process</h3>
+<p><strong>Purpose:</strong> Process a transaction</p>
+
+<div class="code-block">
+Request:  POST /process
+Content-Type: application/x-yaml
+
+txn_id: TXN-123456
+stan: "123456"
+type: T1
+narration: "Payment received"
+quantity: 50
+rate: 25.50
+taxes: 127.50
+total: 1402.50
+
+Response: 200 OK
+Content-Type: application/x-yaml
+
+response_type: APPROVE
+txn_id: TXN-123456
+status: SUCCESS
+message: Transaction approved successfully
+timestamp: 2024-10-23T12:34:56Z
+</div>
+
+<h2>10. Implementation Checklist</h2>
+
+<ul>
+    <li>☐ Receive YAML transaction from Central on /process endpoint</li>
+    <li>☐ Generate random number 1-100 for approval decision</li>
+    <li>☐ Log the decision (APPROVE or REJECT)</li>
+    <li>☐ Calculate sleep duration using formula: fixed + random_value</li>
+    <li>☐ Log the calculated sleep duration</li>
+    <li>☐ Sleep for the calculated duration</li>
+    <li>☐ Log sleep completion</li>
+    <li>☐ If REJECT, select one rejection reason (33.3% each)</li>
+    <li>☐ Construct response in YAML format</li>
+    <li>☐ Log the response being sent</li>
+    <li>☐ Send response back to Central</li>
+    <li>☐ Make all delay parameters configurable via application.properties</li>
+    <li>☐ Implement /health endpoint (returns YAML)</li>
+    <li>☐ Handle concurrent requests independently</li>
+</ul>
+
+<hr>
+
+<p style="text-align: center; color: #7f8c8d; font-size: 0.9em;">
+PROCR Implementation Guide v1.0 | Last Updated: October 23, 2024
+</p>
+
+</body>
+</html>

@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Adapter Service - Requirements Specification</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #9b59b6;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #9b59b6;
+            padding-left: 10px;
+        }
+        h3 {
+            color: #555;
+            margin-top: 20px;
+        }
+        .requirement {
+            background: white;
+            border-left: 4px solid #27ae60;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .requirement.critical {
+            border-left-color: #e74c3c;
+            background: #fadbd8;
+        }
+        .requirement.important {
+            border-left-color: #f39c12;
+            background: #fef5e7;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        table th {
+            background: #34495e;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: bold;
+        }
+        table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #ddd;
+        }
+        table tr:hover {
+            background: #f8f9fa;
+        }
+        .code-block {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        ul, ol {
+            margin: 10px 0;
+            padding-left: 30px;
+        }
+        li {
+            margin: 8px 0;
+        }
+        .section-highlight {
+            background: #ecf0f1;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 15px 0;
+        }
+        .flow-diagram {
+            background: white;
+            border: 1px solid #bdc3c7;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 4px;
+            font-family: monospace;
+            line-height: 1.8;
+        }
+        .label {
+            display: inline-block;
+            padding: 4px 8px;
+            margin: 2px;
+            border-radius: 3px;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+        .label.java {
+            background: #f89820;
+            color: white;
+        }
+        .label.springboot {
+            background: #6db33f;
+            color: white;
+        }
+        .label.network {
+            background: #0066cc;
+            color: white;
+        }
+        .note {
+            background: #d5f4e6;
+            border-left: 4px solid #1abc9c;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 3px;
+        }
+        .warning {
+            background: #fcf8e3;
+            border-left: 4px solid #f39c12;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 3px;
+        }
+        .json-example {
+            background: #f8f9fa;
+            border-left: 4px solid #3498db;
+            padding: 12px;
+            margin: 10px 0;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Adapter Service - Requirements Specification</h1>
+
+<div class="section-highlight">
+    <strong>Project:</strong> Transaction Adapter Service<br>
+    <strong>Technology Stack:</strong> 
+    <span class="label java">Java</span>
+    <span class="label springboot">Spring Boot</span>
+    <span class="label network">TCP Socket + HTTP</span><br>
+    <strong>Document Version:</strong> 1.0<br>
+    <strong>Last Updated:</strong> October 22, 2026
+</div>
+
+<h2>1. Overview</h2>
+
+<div class="requirement critical">
+    The Adapter service is a Spring Boot application that acts as a bridge between a Central transaction server and a PROCR processor service. 
+    Each Adapter instance maintains a single persistent TCP connection to one Central instance, receives transaction messages, 
+    transforms them from JSON to YAML format, sends them to PROCR via HTTP, transforms the responses back to JSON format, 
+    and sends them back to Central. The Adapter uses a thread pool to handle concurrent transaction processing.
+</div>
+
+<h2>2. High-Level Architecture</h2>
+
+<div class="flow-diagram">
+    <strong>Transaction Flow:</strong><br><br>
+    Central<br>
+    &nbsp;&nbsp;↓ (TCP: JSON Transaction)<br>
+    Adapter (Main Thread: Read Messages)<br>
+    &nbsp;&nbsp;↓ (Queue)<br>
+    Adapter (Thread Pool: Transform & Process)<br>
+    &nbsp;&nbsp;↓ (HTTP POST: YAML)<br>
+    PROCR (/process endpoint)<br>
+    &nbsp;&nbsp;↓ (HTTP Response: JSON)<br>
+    Adapter (Main Thread: Transform & Send Back)<br>
+    &nbsp;&nbsp;↓ (TCP: JSON Response)<br>
+    Central
+</div>
+
+<div class="requirement">
+    <strong>REQ-ARC-001: Single Central Connection</strong><br>
+    <ul>
+        <li>Each Adapter instance maintains exactly ONE persistent TCP connection to ONE Central instance</li>
+        <li>Connection is established at startup or on-demand</li>
+        <li>Connection is reused for all transaction message exchanges</li>
+        <li>If connection is lost, Adapter shall attempt to reconnect</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-ARC-002: Thread Pool Architecture</strong><br>
+    <ul>
+        <li>Adapter uses a configurable thread pool to process transactions concurrently</li>
+        <li>Main application thread: Reads messages from Central TCP socket</li>
+        <li>Thread Pool threads: Transform messages, call PROCR, transform responses, queue response back to Central</li>
+        <li>Response thread: Sends queued responses back to Central TCP socket</li>
+    </ul>
+</div>
+
+<h2>3. Connection Management</h2>
+
+<div class="requirement critical">
+    <strong>REQ-CONN-001: TCP Connection to Central</strong><br>
+    <ul>
+        <li><strong>Central Host:</strong> Configurable (environment variable or config file)</li>
+        <li><strong>Central Port:</strong> Configurable (default: 5000)</li>
+        <li><strong>Connection Mode:</strong> Client (Adapter initiates connection to Central)</li>
+        <li><strong>Connection Lifecycle:</strong> Persistent until Adapter shutdown or error</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-CONN-002: Session Management with Central</strong><br>
+    <ul>
+        <li>On connection establishment, Adapter shall wait to receive messages from Central</li>
+        <li>When Adapter starts or after reconnection, it shall automatically send SESSION_START to Central</li>
+        <li>Adapter shall process all transactions until receiving SESSION_END from Central</li>
+        <li>When Adapter receives SESSION_END, it shall continue processing queued transactions</li>
+        <li>Upon graceful shutdown, Adapter shall send SESSION_END to Central if not already received</li>
+    </ul>
+</div>
+
+<div class="requirement important">
+    <strong>REQ-CONN-003: Connection Resilience</strong><br>
+    <ul>
+        <li>If TCP connection to Central is lost unexpectedly, log the error</li>
+        <li>Attempt to reconnect with exponential backoff (1s, 2s, 4s, 8s... up to max 60s)</li>
+        <li>Upon reconnection, resend SESSION_START to Central</li>
+        <li>Discard all unprocessed transactions from previous session</li>
+    </ul>
+</div>
+
+<h2>4. Message Handling</h2>
+
+<h3>4.1 Inbound Messages from Central (JSON)</h3>
+
+<div class="requirement">
+    <strong>REQ-MSG-001: Message Types from Central</strong><br>
+</div>
+
+<table>
+    <tr>
+        <th>Message Type</th>
+        <th>Format</th>
+        <th>Action</th>
+    </tr>
+    <tr>
+        <td>TRANSACTION</td>
+        <td>JSON with TXN details</td>
+        <td>Queue for processing via thread pool</td>
+    </tr>
+    <tr>
+        <td>SESSION_START</td>
+        <td>Session initiation marker</td>
+        <td>Log and set session state to ACTIVE</td>
+    </tr>
+    <tr>
+        <td>SESSION_END</td>
+        <td>Session termination marker</td>
+        <td>Log, set session state to INACTIVE, continue processing queued transactions</td>
+    </tr>
+</table>
+
+<div class="requirement">
+    <strong>REQ-MSG-002: Transaction Message Structure (from Central)</strong><br>
+    Transactions received from Central in JSON format contain:
+</div>
+
+<div class="json-example">
+{
+  "txn_id": "TXN-001234",
+  "stan": "123456",
+  "txn_type": "T1",
+  "narration": "Purchase of Office Supplies",
+  "quantity": 5,
+  "rate": 99.99,
+  "taxes": 49.99,
+  "total": 549.89,
+  "timestamp": "2026-10-22T23:17:46.602+05:30"
+}
+</div>
+
+<h3>4.2 Outbound Messages to Central (JSON)</h3>
+
+<div class="requirement">
+    <strong>REQ-MSG-003: Response Message Format (to Central)</strong><br>
+    Responses sent back to Central in JSON format contain:
+</div>
+
+<div class="json-example">
+{
+  "txn_id": "TXN-001234",
+  "stan": "123456",
+  "status": "APPROVED",
+  "reason": null,
+  "date": "2026-10-22T23:17:46.602+05:30",
+  "timestamp": "2026-10-22T23:17:46.602+05:30"
+}
+</div>
+
+<div class="json-example">
+{
+  "txn_id": "TXN-001235",
+  "stan": "654321",
+  "status": "REJECTED",
+  "reason": "Insufficient Funds",
+  "date": "2026-10-22T23:17:46.602+05:30",
+  "timestamp": "2026-10-22T23:17:46.602+05:30"
+}
+</div>
+
+<h2>5. Data Transformation</h2>
+
+<h3>5.1 JSON to YAML Transformation (for PROCR)</h3>
+
+<div class="requirement">
+    <strong>REQ-TRANSFORM-001: JSON → YAML Conversion</strong><br>
+    <ul>
+        <li>Convert JSON transaction from Central into YAML format</li>
+        <li>All fields shall be preserved as-is</li>
+        <li>No data loss or modification during conversion</li>
+        <li>YAML structure must match PROCR's expected input format</li>
+    </ul>
+</div>
+
+<div class="code-block">
+# Input JSON from Central:
+{
+  "txn_id": "TXN-001234",
+  "stan": "123456",
+  "txn_type": "T1",
+  "narration": "Purchase of Office Supplies",
+  "quantity": 5,
+  "rate": 99.99,
+  "taxes": 49.99,
+  "total": 549.89,
+  "timestamp": "2026-10-22T23:17:46.602+05:30"
+}
+
+# Output YAML for PROCR:
+txn_id: TXN-001234
+stan: "123456"
+txn_type: T1
+narration: Purchase of Office Supplies
+quantity: 5
+rate: 99.99
+taxes: 49.99
+total: 549.89
+timestamp: "2026-10-22T23:17:46.602+05:30"
+</div>
+
+<h3>5.2 YAML to JSON Transformation (from PROCR)</h3>
+
+<div class="requirement">
+    <strong>REQ-TRANSFORM-002: YAML → JSON Conversion</strong><br>
+    <ul>
+        <li>Convert YAML response from PROCR back to JSON format</li>
+        <li>Add txn_id and stan from original request (echo)</li>
+        <li>Include approval status and rejection reason (if applicable)</li>
+        <li>Include processing timestamp from PROCR response</li>
+        <li>Send to Central in JSON format</li>
+    </ul>
+</div>
+
+<h2>6. Request Processing Pipeline</h2>
+
+<div class="requirement critical">
+    <strong>REQ-PROC-001: Thread Pool Processing</strong><br>
+    <ul>
+        <li><strong>Thread Pool Size:</strong> Configurable (default: 10 threads)</li>
+        <li><strong>Queue Type:</strong> Blocking queue (handle backpressure gracefully)</li>
+        <li><strong>Queue Size:</strong> Configurable (default: 1000)</li>
+        <li>Each thread processes one transaction at a time</li>
+        <li>Threads execute the following steps in sequence</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-PROC-002: Transaction Processing Steps</strong><br>
+    For each transaction received from Central:
+    <ol>
+        <li>Enqueue transaction to thread pool processing queue</li>
+        <li>Log transaction receipt (ID, STAN, type)</li>
+        <li>Convert JSON to YAML format</li>
+        <li>Make HTTP POST request to PROCR /process endpoint</li>
+        <li>Parse JSON response from PROCR</li>
+        <li>Log approval/rejection decision</li>
+        <li>Transform response to JSON format (if not already)</li>
+        <li>Enqueue response to outbound queue for transmission to Central</li>
+    </ol>
+</div>
+
+<div class="requirement">
+    <strong>REQ-PROC-003: Response Send-Back Logic</strong><br>
+    <ul>
+        <li>Maintain a queue of responses to be sent back to Central</li>
+        <li>Separate thread or main thread sends queued responses via TCP socket</li>
+        <li>Responses sent in order (FIFO) to maintain message sequence</li>
+        <li>Log each response sent to Central</li>
+    </ul>
+</div>
+
+<h2>7. PROCR HTTP Integration</h2>
+
+<div class="requirement critical">
+    <strong>REQ-PROCR-001: HTTP Client Configuration</strong><br>
+    <ul>
+        <li><strong>PROCR Host:</strong> Configurable (environment variable or config file)</li>
+        <li><strong>PROCR Port:</strong> Configurable (default: 8080)</li>
+        <li><strong>PROCR Base URL:</strong> <code>http://[PROCR_HOST]:[PROCR_PORT]</code></li>
+        <li><strong>Endpoint:</strong> <code>/process</code></li>
+        <li><strong>HTTP Method:</strong> POST</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-PROCR-002: HTTP Request Details</strong><br>
+    <ul>
+        <li><strong>Content-Type:</strong> application/x-yaml</li>
+        <li><strong>Request Body:</strong> YAML-formatted transaction</li>
+        <li><strong>Timeout:</strong> Configurable (default: 10 seconds)</li>
+        <li><strong>Retry Logic:</strong> Retry failed requests (3 attempts with exponential backoff)</li>
+        <li>If all retries fail, log error and treat as rejection (reason: "Service Unavailable")</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-PROCR-003: HTTP Response Handling</strong><br>
+    <ul>
+        <li><strong>Success (200 OK):</strong> Parse JSON response, extract approval status and details</li>
+        <li><strong>Client Error (400):</strong> Log error, treat as rejection with reason "Invalid Request"</li>
+        <li><strong>Server Error (500):</strong> Log error, retry with backoff</li>
+        <li><strong>Timeout/Connection Error:</strong> Retry with exponential backoff</li>
+    </ul>
+</div>
+
+<h2>8. Logging and Monitoring</h2>
+
+<div class="requirement">
+    <strong>REQ-LOG-001: Event Logging</strong><br>
+    Log all significant events:
+    <ul>
+        <li><strong>Startup:</strong> Adapter started, attempting to connect to Central at [HOST:PORT]</li>
+        <li><strong>Connection:</strong> Connected to Central, sending SESSION_START</li>
+        <li><strong>Message Receive:</strong> Received TXN-[ID] from Central (STAN: [STAN], Type: [TYPE])</li>
+        <li><strong>Thread Pool:</strong> Processing TXN-[ID] in thread pool (Queue depth: [N])</li>
+        <li><strong>PROCR Request:</strong> Sending TXN-[ID] to PROCR</li>
+        <li><strong>PROCR Response:</strong> Received response for TXN-[ID] (Status: APPROVED/REJECTED, Reason: [REASON])</li>
+        <li><strong>Response Send:</strong> Sending response for TXN-[ID] back to Central</li>
+        <li><strong>Session End:</strong> Received SESSION_END from Central, processing final transactions</li>
+        <li><strong>Disconnection:</strong> Lost connection to Central, attempting reconnect</li>
+        <li><strong>Shutdown:</strong> Adapter shutting down gracefully</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-LOG-002: Log Format</strong><br>
+    All logs include:
+    <ul>
+        <li>Timestamp (ISO 8601)</li>
+        <li>Log Level (INFO, WARN, ERROR)</li>
+        <li>Component/Class name</li>
+        <li>Descriptive message with context</li>
+    </ul>
+    <div class="code-block">
+[2026-10-22T23:17:46.602+05:30] INFO AdapterService - Received TXN-001234 from Central (STAN: 123456)
+[2026-10-22T23:17:46.603+05:30] INFO TransactionProcessor - Processing TXN-001234 (Queue: 5)
+[2026-10-22T23:17:46.650+05:30] INFO ProcRClient - TXN-001234 APPROVED (47ms)
+[2026-10-22T23:17:46.651+05:30] INFO AdapterService - Sending response for TXN-001234 to Central
+    </div>
+</div>
+
+<div class="requirement">
+    <strong>REQ-LOG-003: Performance Metrics (optional)</strong><br>
+    <ul>
+        <li>Track request latency (end-to-end time from Central to PROCR and back)</li>
+        <li>Track PROCR response time</li>
+        <li>Track thread pool queue depth</li>
+        <li>Log metrics periodically (every 60 seconds) or on request</li>
+    </ul>
+</div>
+
+<h2>9. Configuration Requirements</h2>
+
+<div class="requirement">
+    <strong>REQ-CFG-001: Application Configuration</strong><br>
+    Properties configurable via <code>application.properties</code> or environment variables:
+</div>
+
+<table>
+    <tr>
+        <th>Property</th>
+        <th>Environment Variable</th>
+        <th>Default Value</th>
+        <th>Description</th>
+    </tr>
+    <tr>
+        <td>adapter.central.host</td>
+        <td>CENTRAL_HOST</td>
+        <td>localhost</td>
+        <td>Central server hostname/IP</td>
+    </tr>
+    <tr>
+        <td>adapter.central.port</td>
+        <td>CENTRAL_PORT</td>
+        <td>5000</td>
+        <td>Central server TCP port</td>
+    </tr>
+    <tr>
+        <td>adapter.procr.url</td>
+        <td>PROCR_URL</td>
+        <td>http://localhost:8080</td>
+        <td>PROCR service base URL</td>
+    </tr>
+    <tr>
+        <td>adapter.thread-pool.size</td>
+        <td>THREAD_POOL_SIZE</td>
+        <td>10</td>
+        <td>Number of worker threads</td>
+    </tr>
+    <tr>
+        <td>adapter.thread-pool.queue-size</td>
+        <td>THREAD_POOL_QUEUE_SIZE</td>
+        <td>1000</td>
+        <td>Transaction processing queue size</td>
+    </tr>
+    <tr>
+        <td>adapter.http.timeout</td>
+        <td>HTTP_TIMEOUT</td>
+        <td>10000</td>
+        <td>HTTP request timeout in milliseconds</td>
+    </tr>
+    <tr>
+        <td>adapter.http.retry.max-attempts</td>
+        <td>HTTP_RETRY_ATTEMPTS</td>
+        <td>3</td>
+        <td>Max HTTP retry attempts</td>
+    </tr>
+    <tr>
+        <td>adapter.reconnect.max-backoff</td>
+        <td>RECONNECT_MAX_BACKOFF</td>
+        <td>60000</td>
+        <td>Max backoff for Central reconnection (ms)</td>
+    </tr>
+</table>
+
+<h2>10. Error Handling</h2>
+
+<div class="requirement important">
+    <strong>REQ-ERR-001: Central Connection Loss</strong><br>
+    <ul>
+        <li>If TCP connection to Central is lost, log error immediately</li>
+        <li>Attempt to reconnect with exponential backoff</li>
+        <li>Discard pending transactions from previous session</li>
+        <li>Upon successful reconnection, send SESSION_START and resume processing</li>
+    </ul>
+</div>
+
+<div class="requirement important">
+    <strong>REQ-ERR-002: PROCR Unavailable</strong><br>
+    <ul>
+        <li>If PROCR is unavailable, retry HTTP request with exponential backoff</li>
+        <li>After max retries, treat as rejection with reason "Service Unavailable"</li>
+        <li>Log warning with transaction details</li>
+        <li>Send negative response back to Central</li>
+    </ul>
+</div>
+
+<div class="requirement important">
+    <strong>REQ-ERR-003: Invalid Messages</strong><br>
+    <ul>
+        <li>If received message from Central is malformed JSON, log error and skip</li>
+        <li>If PROCR response is malformed JSON, log error and treat as rejection</li>
+        <li>Do not crash the Adapter; continue processing subsequent messages</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-ERR-004: Thread Pool Overflow</strong><br>
+    <ul>
+        <li>If thread pool queue is full, log warning</li>
+        <li>Blocking queue will block reads from Central until space is available</li>
+        <li>This provides natural backpressure (Central will stop sending if Adapter can't process)</li>
+    </ul>
+</div>
+
+<h2>11. Graceful Shutdown</h2>
+
+<div class="requirement critical">
+    <strong>REQ-SHUTDOWN-001: Graceful Shutdown Procedure</strong><br>
+    Upon receiving SIGTERM or shutdown signal:
+    <ul>
+        <li>Stop accepting new messages from Central</li>
+        <li>Allow thread pool to complete processing of queued transactions</li>
+        <li>Send all queued responses back to Central</li>
+        <li>Send SESSION_END to Central (if not already received)</li>
+        <li>Close TCP connection to Central gracefully</li>
+        <li>Flush all logs</li>
+        <li>Exit application with status code 0</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-SHUTDOWN-002: Shutdown Timeout</strong><br>
+    <ul>
+        <li>Allow up to 30 seconds for graceful shutdown</li>
+        <li>After timeout, force shutdown thread pool and close connections</li>
+        <li>Log any unprocessed transactions before shutdown</li>
+    </ul>
+</div>
+
+<h2>12. Performance Requirements</h2>
+
+<div class="requirement">
+    <strong>REQ-PERF-001: Throughput</strong><br>
+    <ul>
+        <li>Adapter shall handle at least 100 concurrent transactions in the thread pool</li>
+        <li>End-to-end latency (Central to PROCR and back): <500ms for 95th percentile</li>
+        <li>PROCR response time typically <200ms, so bottleneck is network and queuing</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-PERF-002: Memory Efficiency</strong><br>
+    <ul>
+        <li>Thread pool of 10 threads should use minimal memory</li>
+        <li>Queued transactions held in memory temporarily</li>
+        <li>No long-term storage; queues cleared on shutdown or Central disconnection</li>
+    </ul>
+</div>
+
+<h2>13. State Machine</h2>
+
+<div class="flow-diagram">
+    <strong>Adapter State Transitions:</strong><br><br>
+    STARTING<br>
+    └─ (Attempting to connect to Central)<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;↓<br>
+    CONNECTED (Waiting for SESSION_START or receiving transactions)<br>
+    └─ (Received SESSION_START)<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;↓<br>
+    ACTIVE (Processing transactions, sending responses)<br>
+    └─ (Received SESSION_END)<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;↓<br>
+    DRAINING (Processing final queued transactions, sending responses)<br>
+    └─ (All queued transactions processed)<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;↓<br>
+    IDLE (Ready for new SESSION_START)<br>
+    └─ (Connection lost or shutdown signal)<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;↓<br>
+    SHUTDOWN (Graceful shutdown, closing connections)
+</div>
+
+<h2>14. Summary</h2>
+
+<table>
+    <tr>
+        <th>Aspect</th>
+        <th>Details</th>
+    </tr>
+    <tr>
+        <td>Central Connection</td>
+        <td>1 persistent TCP connection (client mode)</td>
+    </tr>
+    <tr>
+        <td>Thread Pool</td>
+        <td>Configurable size (default: 10), processes transactions concurrently</td>
+    </tr>
+    <tr>
+        <td>Data Transformation</td>
+        <td>JSON ↔ YAML bidirectional conversion</td>
+    </tr>
+    <tr>
+        <td>PROCR Integration</td>
+        <td>HTTP POST to /process endpoint, handle retries and errors</td>
+    </tr>
+    <tr>
+        <td>Logging</td>
+        <td>Comprehensive event logging, performance metrics optional</td>
+    </tr>
+    <tr>
+        <td>Resilience</td>
+        <td>Reconnection logic, retry logic, graceful degradation</td>
+    </tr>
+    <tr>
+        <td>Shutdown</td>
+        <td>Graceful shutdown with transaction draining (30s timeout)</td>
+    </tr>
+</table>
+
+<div class="note">
+    <strong>Key Implementation Points:</strong>
+    <ul>
+        <li>Separate thread for reading from Central (blocking I/O)</li>
+        <li>Thread pool for processing transactions concurrently</li>
+        <li>Response queue and thread for sending back to Central</li>
+        <li>Use Spring Boot's RestTemplate or HttpClient for HTTP calls</li>
+        <li>Use Jackson for JSON/YAML serialization</li>
+        <li>Implement circuit breaker pattern for PROCR failures (optional)</li>
+        <li>Log everything; include thread context in logs for debugging</li>
+    </ul>
+</div>
+
+</body>
+</html>

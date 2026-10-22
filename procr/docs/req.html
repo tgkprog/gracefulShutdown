@@ -1,0 +1,687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Transaction Processor API - Requirements Specification</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #e74c3c;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            border-left: 4px solid #e74c3c;
+            padding-left: 10px;
+        }
+        h3 {
+            color: #555;
+            margin-top: 20px;
+        }
+        .requirement {
+            background: white;
+            border-left: 4px solid #27ae60;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .requirement.critical {
+            border-left-color: #e74c3c;
+            background: #fadbd8;
+        }
+        .requirement.important {
+            border-left-color: #f39c12;
+            background: #fef5e7;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        table th {
+            background: #34495e;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: bold;
+        }
+        table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #ddd;
+        }
+        table tr:hover {
+            background: #f8f9fa;
+        }
+        .code-block {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin: 15px 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        ul, ol {
+            margin: 10px 0;
+            padding-left: 30px;
+        }
+        li {
+            margin: 8px 0;
+        }
+        .section-highlight {
+            background: #ecf0f1;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 15px 0;
+        }
+        .label {
+            display: inline-block;
+            padding: 4px 8px;
+            margin: 2px;
+            border-radius: 3px;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+        .label.java {
+            background: #f89820;
+            color: white;
+        }
+        .label.springboot {
+            background: #6db33f;
+            color: white;
+        }
+        .label.rest {
+            background: #0066cc;
+            color: white;
+        }
+        .note {
+            background: #d5f4e6;
+            border-left: 4px solid #1abc9c;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 3px;
+        }
+        .warning {
+            background: #fcf8e3;
+            border-left: 4px solid #f39c12;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 3px;
+        }
+        .json-example {
+            background: #f8f9fa;
+            border-left: 4px solid #3498db;
+            padding: 12px;
+            margin: 10px 0;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+
+<h1>Transaction Processor API (PROCR) - Requirements Specification</h1>
+
+<div class="section-highlight">
+    <strong>Project:</strong> Transaction Processor Service (PROCR)<br>
+    <strong>Technology Stack:</strong> 
+    <span class="label java">Java</span>
+    <span class="label springboot">Spring Boot</span>
+    <span class="label rest">REST API</span><br>
+    <strong>Document Version:</strong> 1.0<br>
+    <strong>Last Updated:</strong> October 22, 2026
+</div>
+
+<h2>1. Overview</h2>
+
+<div class="requirement critical">
+    The PROCR (Processor) service is a stateless Spring Boot REST API that processes transaction requests from Adapter services. 
+    It receives YAML-formatted transaction data via HTTP POST requests, performs random approval decisions (99% success rate), 
+    and returns structured approval/rejection responses. The service is transaction-agnostic and does not persist any data.
+</div>
+
+<h2>2. Core Architecture</h2>
+
+<div class="requirement">
+    <strong>REQ-ARC-001: Stateless Design</strong><br>
+    <ul>
+        <li>The service shall have NO database or persistent storage</li>
+        <li>Each request is processed independently with no session or state management</li>
+        <li>All transaction data is transient; only logging is maintained</li>
+        <li>Multiple instances can run in parallel without coordination</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-ARC-002: Service Endpoints</strong><br>
+    The service shall expose two REST API endpoints:
+    <ul>
+        <li><strong>/health</strong> - Health check endpoint (GET)</li>
+        <li><strong>/process</strong> - Transaction processing endpoint (POST)</li>
+    </ul>
+</div>
+
+<h2>3. Health Check Endpoint</h2>
+
+<div class="requirement">
+    <strong>REQ-HEALTH-001: Health Endpoint Specification</strong><br>
+    <ul>
+        <li><strong>Path:</strong> <code>/health</code></li>
+        <li><strong>Method:</strong> GET</li>
+        <li><strong>Authentication:</strong> None</li>
+        <li><strong>Response Status:</strong> 200 OK</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-HEALTH-002: Health Response Format</strong><br>
+    The health endpoint shall return a YAML response indicating service status.
+</div>
+
+<div class="code-block">
+status: UP
+service: PROCR
+timestamp: "2026-10-22T23:17:46.602+05:30"
+uptime_seconds: 3600
+version: "1.0.0"
+</div>
+
+<div class="note">
+    <strong>Note:</strong> The health endpoint requires no authentication and should respond quickly. 
+    It can be used by Adapters to verify that PROCR is available before sending transaction requests.
+</div>
+
+<h2>4. Transaction Processing Endpoint</h2>
+
+<div class="requirement critical">
+    <strong>REQ-PROC-001: Process Endpoint Specification</strong><br>
+    <ul>
+        <li><strong>Path:</strong> <code>/process</code></li>
+        <li><strong>Method:</strong> POST</li>
+        <li><strong>Content-Type (Request):</strong> application/x-yaml</li>
+        <li><strong>Content-Type (Response):</strong> application/x-yaml</li>
+        <li><strong>Authentication:</strong> None</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-PROC-002: Input Format - YAML Transaction</strong><br>
+    The endpoint accepts YAML-formatted transaction data from the Adapter. 
+    The YAML structure shall contain transaction details received from Central.
+</div>
+
+<div class="code-block">
+# Input YAML Example
+txn_id: TXN-001234
+stan: "123456"
+txn_type: "T1"
+narration: "Purchase of Office Supplies"
+quantity: 5
+rate: 99.99
+taxes: 49.99
+total: 549.89
+timestamp: "2026-10-22T23:17:46.602+05:30"
+</div>
+
+<div class="requirement">
+    <strong>REQ-PROC-003: Input Validation</strong><br>
+    <ul>
+        <li>All required fields must be present in the YAML request</li>
+        <li>If any required field is missing or malformed, return HTTP 400 Bad Request with error details</li>
+        <li>Field validation errors shall be logged with the request details</li>
+        <li>Do not process invalid requests</li>
+    </ul>
+</div>
+
+<h2>5. Processing Logic</h2>
+
+<div class="requirement critical">
+    <strong>REQ-PROC-LOGIC-001: Approval Decision Algorithm</strong><br>
+    <ul>
+        <li>Generate a random number between 1-100 (inclusive)</li>
+        <li>If random number is 1-99: APPROVE the transaction (99% success rate)</li>
+        <li>If random number is 100: REJECT the transaction (1% rejection rate)</li>
+        <li>All decisions are final and deterministic for a single request</li>
+        <li><strong>Response Delay Before Sending:</strong>
+            <ul style="margin-top: 8px;">
+                <li><strong>Processing Flow:</strong> Log decision → Calculate sleep duration → Sleep → Log sleep action → Send response</li>
+                <li><strong>Sleep Duration Formula:</strong> <code>sleep_ms = fixed_delay + random_value</code>
+                    <ul style="margin-top: 6px;">
+                        <li><code>fixed_delay</code>: Base delay in milliseconds (always applied)</li>
+                        <li><code>random_value</code>: Random value selected from range [min_random, max_random] in steps of <code>step</code></li>
+                    </ul>
+                </li>
+                <li><strong>Example:</strong> If fixed=1000, min_random=100, step=100, max_random=1000:
+                    <ul style="margin-top: 6px;">
+                        <li>Possible random values: 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000</li>
+                        <li>Sleep duration: 1000 + {one of above} = 1100 to 2000 ms</li>
+                    </ul>
+                </li>
+                <li><strong>Default Configuration:</strong>
+                    <ul style="margin-top: 6px;">
+                        <li><code>fixed_delay = 0 ms</code></li>
+                        <li><code>min_random = 0 ms</code></li>
+                        <li><code>step = 100 ms</code></li>
+                        <li><code>max_random = 200 ms</code></li>
+                        <li>Default sleep range: 0 to 200 ms (in 100 ms increments)</li>
+                    </ul>
+                </li>
+                <li><strong>Configurability:</strong> All parameters (fixed, min_random, step, max_random) should be configurable via application.properties</li>
+                <li><strong>Logging:</strong> Processor must log the calculated sleep duration before and after sleeping</li>
+            </ul>
+        </li>        
+    </ul>
+</div>
+
+<div class="requirement important">
+    <strong>REQ-PROC-LOGIC-002: Rejection Reasons</strong><br>
+    When a transaction is REJECTED, randomly select one of the following failure reasons:
+    <ul>
+        <li>Insufficient Funds</li>
+        <li>Card Closed</li>
+        <li>Network Down</li>
+    </ul>
+    Each rejection reason should have equal probability (33.3% each).
+</div>
+
+<div class="requirement">
+    <strong>REQ-PROC-LOGIC-003: Processing Determinism</strong><br>
+    <ul>
+        <li>Each request is processed independently</li>
+        <li>No state carries over between requests</li>
+        <li>No transaction history is maintained</li>
+        <li>Concurrent requests may have different outcomes based on random generation</li>
+    </ul>
+</div>
+
+<h2>6. Response Format</h2>
+
+<div class="requirement critical">
+    <strong>REQ-RESPONSE-001: Success Response (HTTP 200)</strong><br>
+    When a transaction is processed successfully (regardless of approval/rejection), 
+    the endpoint shall return HTTP 200 OK with the following YAML structure:
+</div>
+
+<strong>Example - APPROVED Transaction:</strong>
+<div class="code-block">
+txn_id: TXN-001234
+stan: "123456"
+status: APPROVED
+reason: null
+date: "2026-10-22T23:17:46.602+05:30"
+timestamp: "2026-10-22T23:17:46.602+05:30"
+response_time_ms: 45
+</div>
+
+<strong>Example - REJECTED Transaction:</strong>
+<div class="code-block">
+txn_id: TXN-001235
+stan: "654321"
+status: REJECTED
+reason: Insufficient Funds
+date: "2026-10-22T23:17:46.602+05:30"
+timestamp: "2026-10-22T23:17:46.602+05:30"
+response_time_ms: 52
+</div>
+
+<table>
+    <tr>
+        <th>Field</th>
+        <th>Data Type</th>
+        <th>Description</th>
+        <th>Notes</th>
+    </tr>
+    <tr>
+        <td>txn_id</td>
+        <td>String</td>
+        <td>Transaction ID from input (TXN-XXXXX)</td>
+        <td>Echo from request</td>
+    </tr>
+    <tr>
+        <td>stan</td>
+        <td>String</td>
+        <td>System Trace Audit Number</td>
+        <td>Echo from request</td>
+    </tr>
+    <tr>
+        <td>status</td>
+        <td>String (Enum)</td>
+        <td>Transaction approval status</td>
+        <td>APPROVED or REJECTED</td>
+    </tr>
+    <tr>
+        <td>reason</td>
+        <td>String or null</td>
+        <td>Failure reason if rejected</td>
+        <td>null for APPROVED, one of: "Insufficient Funds", "Card Closed", "Network Down" for REJECTED</td>
+    </tr>
+    <tr>
+        <td>date</td>
+        <td>DateTime</td>
+        <td>Processing completion timestamp</td>
+        <td>ISO 8601 format</td>
+    </tr>
+    <tr>
+        <td>timestamp</td>
+        <td>DateTime</td>
+        <td>Processing completion timestamp (duplicate for compatibility)</td>
+        <td>ISO 8601 format, same as date</td>
+    </tr>
+    <tr>
+        <td>response_time_ms</td>
+        <td>Integer</td>
+        <td>Time taken to process request</td>
+        <td>In milliseconds</td>
+    </tr>
+</table>
+
+<div class="requirement">
+    <strong>REQ-RESPONSE-002: Error Response (HTTP 400)</strong><br>
+    When a request contains invalid or malformed data, return HTTP 400 Bad Request with error details in YAML format:
+</div>
+
+<div class="code-block">
+error: Invalid request
+message: Missing required field: txn_id
+timestamp: "2026-10-22T23:17:46.602+05:30"
+status: 400
+</div>
+
+<div class="requirement">
+    <strong>REQ-RESPONSE-003: Server Error Response (HTTP 500)</strong><br>
+    When an unexpected server error occurs, return HTTP 500 Internal Server Error with error details in YAML format:
+</div>
+
+<div class="code-block">
+error: Internal server error
+message: Unexpected error processing transaction
+timestamp: "2026-10-22T23:17:46.602+05:30"
+status: 500
+</div>
+
+<h2>7. Logging Requirements</h2>
+
+<div class="requirement">
+    <strong>REQ-LOG-001: Request Logging</strong><br>
+    For each incoming transaction request, log:
+    <ul>
+        <li>Request timestamp</li>
+        <li>Transaction ID</li>
+        <li>STAN</li>
+        <li>Transaction type and narration</li>
+        <li>Request size and format</li>
+    </ul>
+    <div class="code-block">
+[2026-10-22T23:17:46.602+05:30] INFO TransactionProcessor - Received TXN-001234 (STAN: 123456, T1: Purchase of Office Supplies)
+    </div>
+</div>
+
+<div class="requirement">
+    <strong>REQ-LOG-002: Processing Logging</strong><br>
+    For each transaction processed, log:
+    <ul>
+        <li>Decision timestamp</li>
+        <li>Approval/Rejection status</li>
+        <li>Rejection reason (if applicable)</li>
+        <li>Processing time in milliseconds</li>
+    </ul>
+    <div class="code-block">
+[2026-10-22T23:17:46.602+05:30] INFO TransactionProcessor - TXN-001234 APPROVED (52ms)
+[2026-10-22T23:17:46.603+05:30] INFO TransactionProcessor - TXN-001235 REJECTED - Insufficient Funds (45ms)
+    </div>
+</div>
+
+<div class="requirement">
+    <strong>REQ-LOG-003: Error Logging</strong><br>
+    For validation errors or processing failures, log:
+    <ul>
+        <li>Error level (ERROR or WARN)</li>
+        <li>Error description</li>
+        <li>Request details (if available)</li>
+        <li>Stack trace (for exceptions)</li>
+    </ul>
+    <div class="code-block">
+[2026-10-22T23:17:46.602+05:30] WARN TransactionProcessor - Invalid YAML format: missing field 'txn_id'
+[2026-10-22T23:17:46.602+05:30] ERROR TransactionProcessor - Exception processing TXN-001236: ...
+    </div>
+</div>
+
+<div class="requirement">
+    <strong>REQ-LOG-004: Health Check Logging</strong><br>
+    <ul>
+        <li>Log health check requests at DEBUG level (optional, to reduce log volume)</li>
+        <li>Log health check failures at ERROR level</li>
+        <li>Include service uptime and request count in periodic logs</li>
+    </ul>
+</div>
+
+<h2>8. Performance Requirements</h2>
+
+<div class="requirement">
+    <strong>REQ-PERF-001: Response Time</strong><br>
+    <ul>
+        <li>Health check endpoint should respond in <100ms</li>
+        <li>Transaction processing should complete in <200ms per transaction</li>
+        <li>Actual response time depends on YAML parsing and JSON serialization</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-PERF-002: Throughput</strong><br>
+    <ul>
+        <li>The service shall support at least 100 concurrent transaction requests</li>
+        <li>Stateless design allows horizontal scaling (multiple instances)</li>
+        <li>No database connection pooling or resource contention</li>
+    </ul>
+</div>
+
+<h2>9. Configuration Requirements</h2>
+
+<div class="requirement">
+    <strong>REQ-CFG-001: Application Properties</strong><br>
+    The following properties shall be configurable via <code>application.properties</code> or environment variables:
+</div>
+
+<table>
+    <tr>
+        <th>Property</th>
+        <th>Default Value</th>
+        <th>Description</th>
+    </tr>
+    <tr>
+        <td>server.port</td>
+        <td>8080</td>
+        <td>HTTP server port</td>
+    </tr>
+    <tr>
+        <td>server.servlet.context-path</td>
+        <td>/</td>
+        <td>Application context path</td>
+    </tr>
+    <tr>
+        <td>procr.approval.rate</td>
+        <td>99</td>
+        <td>Approval rate as percentage (1-100)</td>
+    </tr>
+    <tr>
+        <td>logging.level.root</td>
+        <td>INFO</td>
+        <td>Root logging level</td>
+    </tr>
+    <tr>
+        <td>spring.application.name</td>
+        <td>procr</td>
+        <td>Application name</td>
+    </tr>
+</table>
+
+<h2>10. Error Handling</h2>
+
+<div class="requirement important">
+    <strong>REQ-ERR-001: Malformed YAML</strong><br>
+    <ul>
+        <li>If YAML is malformed or cannot be parsed, return HTTP 400 with error message</li>
+        <li>Log the parsing error with the request body (truncated for security)</li>
+        <li>Do not crash the service; continue processing subsequent requests</li>
+    </ul>
+</div>
+
+<div class="requirement important">
+    <strong>REQ-ERR-002: Missing Required Fields</strong><br>
+    Required fields in the YAML request:
+    <ul>
+        <li>txn_id</li>
+        <li>stan</li>
+        <li>txn_type</li>
+        <li>narration</li>
+        <li>quantity</li>
+        <li>rate</li>
+        <li>total</li>
+    </ul>
+    If any are missing, return HTTP 400 with field name in error message.
+</div>
+
+<div class="requirement">
+    <strong>REQ-ERR-003: Unexpected Exceptions</strong><br>
+    <ul>
+        <li>Catch all unexpected exceptions in the processing pipeline</li>
+        <li>Return HTTP 500 with generic error message</li>
+        <li>Log the full exception stack trace for debugging</li>
+        <li>Do not expose sensitive information in error responses</li>
+    </ul>
+</div>
+
+<h2>11. Integration with Adapter</h2>
+
+<div class="requirement">
+    <strong>REQ-INTEG-001: HTTP Request from Adapter</strong><br>
+    The Adapter will make HTTP POST requests to the /process endpoint:
+    <ul>
+        <li>URL: <code>http://procr-host:8080/process</code></li>
+        <li>Method: POST</li>
+        <li>Content-Type: application/x-yaml</li>
+        <li>Body: YAML-formatted transaction</li>
+        <li>Timeout: Adapter should set a reasonable timeout (suggest 5-10 seconds)</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-INTEG-002: Response Handling</strong><br>
+    The Adapter will:
+    <ul>
+        <li>Parse the JSON response from /process</li>
+        <li>Extract approval status and reason (if rejected)</li>
+        <li>Transform the response back to JSON format for Central</li>
+        <li>Send the response to Central via the TCP connection</li>
+        <li>Handle HTTP errors (4xx, 5xx) by logging and potentially retrying</li>
+    </ul>
+</div>
+
+<h2>12. Deployment Considerations</h2>
+
+<div class="requirement">
+    <strong>REQ-DEPLOY-001: Containerization</strong><br>
+    <ul>
+        <li>Application should be containerizable (Docker-ready)</li>
+        <li>No external dependencies beyond JDK and Spring Boot</li>
+        <li>Environment variables for configuration (PROCR_PORT, PROCR_APPROVAL_RATE, etc.)</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-DEPLOY-002: Graceful Shutdown</strong><br>
+    <ul>
+        <li>Application should handle SIGTERM gracefully</li>
+        <li>Allow in-flight requests to complete within a timeout period</li>
+        <li>Flush logs before shutdown</li>
+        <li>Exit cleanly with status code 0</li>
+    </ul>
+</div>
+
+<h2>13. Security Considerations</h2>
+
+<div class="requirement">
+    <strong>REQ-SEC-001: Input Validation</strong><br>
+    <ul>
+        <li>Validate YAML structure and field types</li>
+        <li>Reject requests with unexpected fields or data types</li>
+        <li>Do not allow arbitrary code execution from YAML</li>
+        <li>Use safe YAML parsing libraries</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-SEC-002: No Sensitive Data Logging</strong><br>
+    <ul>
+        <li>Do not log full transaction amounts or sensitive card information</li>
+        <li>Log only transaction IDs, STANs, and processing results</li>
+        <li>Truncate long field values in logs</li>
+    </ul>
+</div>
+
+<div class="requirement">
+    <strong>REQ-SEC-003: No Authentication (For Now)</strong><br>
+    <ul>
+        <li>This specification does not include authentication/authorization</li>
+        <li>Assume trusted network between Adapter and PROCR</li>
+        <li>Future versions may add API keys or OAuth2</li>
+    </ul>
+</div>
+
+<h2>14. Summary of API Contract</h2>
+
+<table>
+    <tr>
+        <th>Endpoint</th>
+        <th>Method</th>
+        <th>Request Format</th>
+        <th>Response Format</th>
+        <th>Status Codes</th>
+    </tr>
+    <tr>
+        <td>/health</td>
+        <td>GET</td>
+        <td>N/A</td>
+        <td>application/x-yaml</td>
+        <td>200 OK</td>
+    </tr>
+    <tr>
+        <td>/process</td>
+        <td>POST</td>
+        <td>application/x-yaml</td>
+        <td>application/x-yaml</td>
+        <td>200 OK, 400 Bad Request, 500 Internal Server Error</td>
+    </tr>
+</table>
+
+<div class="note">
+    <strong>Key Points for Implementation:</strong>
+    <ul>
+        <li>Completely stateless - no caching, sessions, or database</li>
+        <li>99% approval rate is deterministic random decision per request</li>
+        <li>3 possible rejection reasons with equal probability</li>
+        <li>All processing logged but no data persistence</li>
+        <li><strong>All responses in YAML format:</strong> Both health and process endpoints return YAML</li>
+        <li>Simple synchronous request/response model</li>
+    </ul>
+</div>
+
+</body>
+</html>
