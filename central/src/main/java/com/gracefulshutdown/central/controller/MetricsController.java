@@ -2,17 +2,20 @@ package com.gracefulshutdown.central.controller;
 
 import com.gracefulshutdown.central.application.MetricsService;
 import org.springframework.http.MediaType;
+import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.ModelAndView;
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * REST API Controller for metrics, status, and reporting.
- * Serves comprehensive JSON APIs for monitoring and information service.
+ * Controller for metrics, status, and reporting.
+ * Serves HTML dashboard view and JSON APIs for monitoring and information service.
  */
+@Controller
 @RestController
 @RequestMapping("/central")
 public class MetricsController {
@@ -90,10 +93,11 @@ public class MetricsController {
     }
     
     /**
-     * Serve HTML dashboard
+     * Serve HTML dashboard using Thymeleaf template
      */
-    @GetMapping(value = "/dashboard", produces = MediaType.TEXT_HTML_VALUE)
-    public String getDashboard() {
-        return "<h1>Dashboard - Coming Soon</h1><p>Real-time metrics dashboard will be available here.</p>";
+    @GetMapping(value = "/dashboard")
+    public ModelAndView getDashboard() {
+        ModelAndView modelAndView = new ModelAndView("dashboard");
+        return modelAndView;
     }
 }
