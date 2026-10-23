@@ -104,13 +104,16 @@ public class AdapterOrchestrator {
         }
         logger.info("Started {} ProcessorThreads", processorThreadCount);
         
+        // Set running flag BEFORE starting background tasks
+        // (threads check this flag in their while loops)
+        running = true;
+        
         // Start background task to evict expired responses
         startResponseEvictionTask();
         
         // Start PROCR health check and session auto-start
         startProcrHealthCheckTask();
         
-        running = true;
         logger.info("✅ Adapter Orchestrator started successfully");
     }
     

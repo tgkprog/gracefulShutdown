@@ -27,7 +27,7 @@ public class TcpMessageSender {
      * Send SESSION_START message to Central
      */
     public void sendSessionStart() throws IOException {
-        String sessionStartMsg = "message_type: SESSION_START\n---\n";
+        String sessionStartMsg = "{\"message_type\":\"SESSION_START\"}\n---\n";
         send(sessionStartMsg);
     }
 
@@ -35,7 +35,7 @@ public class TcpMessageSender {
      * Send SESSION_END message to Central
      */
     public void sendSessionEnd() throws IOException {
-        String sessionEndMsg = "message_type: SESSION_END\n---\n";
+        String sessionEndMsg = "{\"message_type\":\"SESSION_END\"}\n---\n";
         send(sessionEndMsg);
     }
 

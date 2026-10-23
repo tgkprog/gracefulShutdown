@@ -24,13 +24,13 @@ fi
 echo "📦 Building with Maven..."
 mvn package -DskipTests
 
-if [ -f "target/adapter-json-yaml-converter-1.0.0.jar" ]; then
-    JAR_SIZE=$(du -h "target/adapter-json-yaml-converter-1.0.0.jar" | cut -f1)
+if [ -f "target/adapter-service-1.0.0.jar" ]; then
+    JAR_SIZE=$(du -h "target/adapter-service-1.0.0.jar" | cut -f1)
     echo ""
     echo "════════════════════════════════════════════════════════════════"
     echo "✅ BUILD SUCCESSFUL"
     echo "════════════════════════════════════════════════════════════════"
-    echo "JAR: target/adapter-json-yaml-converter-1.0.0.jar ($JAR_SIZE)"
+    echo "JAR: target/adapter-service-1.0.0.jar ($JAR_SIZE)"
     echo ""
     echo "To start: ./run.sh"
     echo ""

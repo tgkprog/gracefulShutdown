@@ -99,9 +99,11 @@ public class ResponseCache {
     
     /**
      * Get count of pending transactions waiting in cache.
+     * Only counts non-expired entries and evicts expired ones.
      * Used during graceful shutdown to monitor cache drain.
      */
     public int getPendingCount() {
+        evictExpired();
         return cache.size();
     }
     
