@@ -14,12 +14,29 @@ public class SessionManager {
     private final AtomicReference<AdapterState> currentState;
     private volatile long sessionStartTime;
     private volatile long sessionEndTime;
+    private volatile boolean sessionStartSent = false;
     
     public SessionManager() {
         this.currentState = new AtomicReference<>(AdapterState.IDLE);
         this.sessionStartTime = 0;
         this.sessionEndTime = 0;
+        this.sessionStartSent = false;
         logger.info("SessionManager initialized in state: {}", currentState.get());
+    }
+    
+    /**
+     * Mark that SESSION_START has been sent to Central.
+     */
+    public void markSessionStartSent() {
+        this.sessionStartSent = true;
+        logger.info("SESSION_START sent to Central marked");
+    }
+    
+    /**
+     * Check if SESSION_START has been sent.
+     */
+    public boolean isSessionStartSent() {
+        return sessionStartSent;
     }
     
     /**

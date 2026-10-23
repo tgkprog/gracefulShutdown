@@ -11,15 +11,15 @@
         </encoder>
     </appender>
     
-    <!-- File Rolling Appender with plain .log format -->
+    <!-- File Rolling Appender with date-based directory structure yyyy/MM/dd -->
     <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>log/procr/procr.log</file>
+        <file>/data/code/gt/gracefulShutdown/logs/procr.log</file>
         <encoder>
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
         </encoder>
         <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>log/procr/%d{yyyy/MMM/dd}/procr-%d{yyyyMMdd-HHmmss}-%i.log</fileNamePattern>
-            <maxFileSize>5MB</maxFileSize>
+            <fileNamePattern>/data/code/gt/gracefulShutdown/%d{yyyy/MM/dd}/procr-%d{HHmmss}-%i.log</fileNamePattern>
+            <maxFileSize>4MB</maxFileSize>
             <maxHistory>30</maxHistory>
             <totalSizeCap>1GB</totalSizeCap>
         </rollingPolicy>

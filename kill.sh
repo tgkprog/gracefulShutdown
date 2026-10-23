@@ -99,8 +99,43 @@ function kill_adapter() {
     echo "════════════════════════════════════════════════════════════════"
     echo "Killing Adapter Server"
     echo "════════════════════════════════════════════════════════════════"
-    kill_by_pattern "adapter.*9090" "Adapter (port 9090)"
-    echo ""
+    
+    # First try by port pattern
+    local pid=$(ps aux | grep -E "adapter.*9090" | grep -v grep | awk '{print $2}' | head -1)
+    
+    # If not found, try by JAR name
+    if [ -z "$pid" ]; then
+        pid=$(ps aux | grep -E "java.*adapter-service.*\.jar" | grep -v grep | awk '{print $2}' | head -1)
+        if [ -n "$pid" ]; then
+            echo "Found by JAR name: adapter-service"
+        fi
+    fi
+    
+    if [ -z "$pid" ]; then
+        echo "${YELLOW}⊘ Adapter not running${NC}"
+        return 0
+    fi
+    
+    echo "Found PID: $pid"
+    echo "Process: $(ps -p $pid -o cmd= | cut -c1-80)"
+    
+    echo "${YELLOW}Killing PID $pid...${NC}"
+    kill -TERM "$pid"
+    
+    sleep 2
+    
+    if ps -p "$pid" > /dev/null 2>&1; then
+        echo "${RED}Process still running, forcing kill...${NC}"
+        kill -9 "$pid"
+        sleep 1
+    fi
+    
+    if ! ps -p "$pid" > /dev/null 2>&1; then
+        echo "${GREEN}✓ Killed successfully${NC}"
+    else
+        echo "${RED}✗ Failed to kill${NC}"
+        return 1
+    fi
 }
 
 function kill_pattern() {

@@ -62,6 +62,7 @@ public class SenderThread extends Thread {
                 }
                 
                 try {
+                    // Each line from Central should be a complete JSON object
                     handleMessage(line.trim(), mapper);
                 } catch (Exception e) {
                     logger.error("Error processing message: {}", line, e);
@@ -108,7 +109,7 @@ public class SenderThread extends Thread {
             handleSessionStart();
         } else if ("SESSION_END".equals(messageType)) {
             handleSessionEnd();
-        } else if ("TRANSACTION".equals(messageType) || jsonNode.has("transaction_id")) {
+        } else if ("TRANSACTION".equals(messageType) || jsonNode.has("txnId") || jsonNode.has("transaction_id")) {
             handleTransaction(jsonMessage);
         } else {
             logger.warn("Unknown message type: {}", messageType);
@@ -157,44 +158,66 @@ public class SenderThread extends Thread {
      * Handle Transaction message.
      */
     private void handleTransaction(String jsonMessage) throws IOException {
-        logger.info("Received TRANSACTION from Central");
+        logger.debug("Received TRANSACTION from Central: {}", jsonMessage);
         
         if (!sessionManager.isSessionActive()) {
-            String ackJson = "{\"ack_status\": \"ERROR\", \"message\": \"No active session\"}";
+            String ackJson = "{\"txnId\": \"UNKNOWN\", \"status\": \"REJECTED\", \"message\": \"No active session\"}";
             messageSender.sendJson(ackJson);
             logger.warn("Transaction rejected: session not active");
             return;
         }
         
-        // Parse JSON and extract transaction details
-        ObjectMapper mapper = new ObjectMapper();
-        var jsonNode = mapper.readTree(jsonMessage);
-        
-        String transactionId = jsonNode.has("transaction_id") ? 
-            jsonNode.get("transaction_id").asText() : UUID.randomUUID().toString();
-        String amount = jsonNode.has("amount") ? 
-            jsonNode.get("amount").asText() : "0";
-        String clientId = jsonNode.has("client_id") ? 
-            jsonNode.get("client_id").asText() : "UNKNOWN";
-        
-        // Create Transaction object
-        Transaction txn = new Transaction();
-        txn.setId(transactionId);
-        txn.setAmount(amount);
-        txn.setClientId(clientId);
-        txn.setReceivedAt(System.currentTimeMillis());
-        
-        // Enqueue for processing
-        boolean enqueued = transactionQueue.enqueue(txn);
-        if (enqueued) {
-            String ackJson = "{\"ack_status\": \"OK\", \"message\": \"Transaction enqueued\", " +
-                "\"transaction_id\": \"" + transactionId + "\"}";
+        try {
+            // Parse JSON transaction from Central
+            ObjectMapper mapper = new ObjectMapper();
+            var jsonNode = mapper.readTree(jsonMessage);
+            
+            // Extract all fields from Central's JSON transaction (camelCase: txnId, txnType, etc.)
+            String txnId = jsonNode.has("txnId") ? jsonNode.get("txnId").asText() : 
+                          (jsonNode.has("txn_id") ? jsonNode.get("txn_id").asText() : UUID.randomUUID().toString());
+            String stan = jsonNode.has("stan") ? jsonNode.get("stan").asText() : "";
+            String txnType = jsonNode.has("txnType") ? jsonNode.get("txnType").asText() : 
+                            (jsonNode.has("type") ? jsonNode.get("type").asText() : "");
+            String narration = jsonNode.has("narration") ? jsonNode.get("narration").asText() : "";
+            Integer quantity = jsonNode.has("quantity") ? jsonNode.get("quantity").asInt() : 0;
+            Double rate = jsonNode.has("rate") ? jsonNode.get("rate").asDouble() : 0.0;
+            Double taxes = jsonNode.has("taxes") ? jsonNode.get("taxes").asDouble() : 0.0;
+            Double total = jsonNode.has("total") ? jsonNode.get("total").asDouble() : 0.0;
+            String timestamp = jsonNode.has("timestamp") ? jsonNode.get("timestamp").asText() : "";
+            
+            logger.debug("Parsed transaction - ID: {}, Type: {}, Total: {}", txnId, txnType, total);
+            
+            // Create Transaction object with all fields
+            Transaction txn = new Transaction();
+            txn.setTransaction_id(txnId);
+            txn.setStan(stan);
+            txn.setType(txnType);
+            txn.setNarration(narration);
+            txn.setQuantity(quantity);
+            txn.setRate(rate);
+            txn.setTaxes(taxes);
+            txn.setTotal(total);
+            txn.setTimestamp(timestamp);
+            txn.setReceivedAt(System.currentTimeMillis());
+            
+            // Enqueue for processing
+            boolean enqueued = transactionQueue.enqueue(txn);
+            if (enqueued) {
+                // Send acknowledgment back to Central in JSON format
+                String ackJson = "{\"txnId\": \"" + txnId + "\", \"status\": \"RECEIVED\", " +
+                    "\"message\": \"Transaction received and queued for processing\"}";
+                messageSender.sendJson(ackJson);
+                logger.debug("Transaction {} enqueued for processing", txnId);
+            } else {
+                String ackJson = "{\"txnId\": \"" + txnId + "\", \"status\": \"REJECTED\", " +
+                    "\"message\": \"Queue full\"}";
+                messageSender.sendJson(ackJson);
+                logger.warn("Transaction {} rejected: queue full", txnId);
+            }
+        } catch (Exception e) {
+            logger.error("Error processing transaction: {}", jsonMessage, e);
+            String ackJson = "{\"status\": \"ERROR\", \"message\": \"" + e.getMessage() + "\"}";
             messageSender.sendJson(ackJson);
-            logger.info("Transaction {} enqueued for processing", transactionId);
-        } else {
-            String ackJson = "{\"ack_status\": \"ERROR\", \"message\": \"Queue full\"}";
-            messageSender.sendJson(ackJson);
-            logger.warn("Transaction {} rejected: queue full", transactionId);
         }
     }
     

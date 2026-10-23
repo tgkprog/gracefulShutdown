@@ -88,14 +88,14 @@ public class ProcessorThread extends Thread {
         long startTime = System.currentTimeMillis();
         
         try {
-            // Step 1: Convert transaction to YAML
-            String yamlRequest = converter.jsonToYaml(txn.toJson());
-            logger.debug("ProcessorThread-{}: Converted txn {} to YAML (length: {})", 
-                threadId, txn.getId(), yamlRequest.length());
+            // Step 1: Get transaction as JSON (PROCR expects JSON, not YAML)
+            String jsonRequest = txn.toJson();
+            logger.debug("ProcessorThread-{}: Prepared txn {} as JSON (length: {})", 
+                threadId, txn.getId(), jsonRequest.length());
             
             // Step 2: Send to PROCR and get response (with retry logic & circuit breaker)
             logger.info("ProcessorThread-{}: Sending txn {} to PROCR", threadId, txn.getId());
-            Response response = procrClient.sendTransaction(yamlRequest, txn.getId());
+            Response response = procrClient.sendTransaction(jsonRequest, txn.getId());
             
             if (response == null) {
                 logger.error("ProcessorThread-{}: No response from PROCR for txn {}", threadId, txn.getId());
@@ -109,9 +109,9 @@ public class ProcessorThread extends Thread {
             // Step 3: Cache the response
             responseCache.put(txn.getId(), response);
             
-            // Step 4: Convert response from YAML to JSON
-            String jsonResponse = converter.yamlToJson(response.toYaml());
-            logger.debug("ProcessorThread-{}: Converted response {} to JSON (length: {})", 
+            // Step 4: Send JSON response back to Central via TCP
+            String jsonResponse = response.toJson();
+            logger.debug("ProcessorThread-{}: Prepared response {} as JSON (length: {})", 
                 threadId, txn.getId(), jsonResponse.length());
             
             // Step 5: Send JSON response back to Central via TCP

@@ -1,5 +1,6 @@
 package com.gracefulshutdown.adapter.domain;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLMapper;
 
 /**
@@ -61,6 +62,18 @@ public class Response {
 
     public void setTimestamp(String timestamp) {
         this.timestamp = timestamp;
+    }
+
+    /**
+     * Convert response to JSON string.
+     */
+    public String toJson() {
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            return mapper.writeValueAsString(this);
+        } catch (Exception e) {
+            throw new RuntimeException("Error converting response to JSON", e);
+        }
     }
 
     /**

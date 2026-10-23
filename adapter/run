@@ -8,7 +8,7 @@
 set -e
 
 PORT="${PORT:-9090}"
-JAR_FILE="target/adapter-json-yaml-converter-1.0.0.jar"
+JAR_FILE="target/adapter-service-1.0.0.jar"
 
 # Validate JAR exists
 if [ ! -f "$JAR_FILE" ]; then

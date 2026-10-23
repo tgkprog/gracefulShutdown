@@ -47,6 +47,14 @@ public class TransactionCache {
         return entry != null ? entry.transaction : null;
     }
 
+    public long getResponseTimeMs(String txnId) {
+        CacheEntry entry = cache.get(txnId);
+        if (entry != null) {
+            return System.currentTimeMillis() - entry.createdAt;
+        }
+        return 0;
+    }
+
     public void clear() {
         cache.clear();
     }

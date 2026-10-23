@@ -3,6 +3,7 @@ package com.gracefulshutdown.adapter.tcp;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -13,8 +14,10 @@ import java.time.Instant;
 
 /**
  * TcpServer listens for incoming connections from Central
+ * Disabled by default for Adapter (Adapter is a TCP client, not server)
  */
 @Service
+@ConditionalOnProperty(name = "adapter.tcp.server.enabled", havingValue = "true", matchIfMissing = false)
 public class TcpServer {
     private static final Logger logger = LoggerFactory.getLogger(TcpServer.class);
 

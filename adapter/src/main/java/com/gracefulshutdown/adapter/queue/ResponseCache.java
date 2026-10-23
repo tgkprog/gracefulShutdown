@@ -98,6 +98,14 @@ public class ResponseCache {
     }
     
     /**
+     * Get count of pending transactions waiting in cache.
+     * Used during graceful shutdown to monitor cache drain.
+     */
+    public int getPendingCount() {
+        return cache.size();
+    }
+    
+    /**
      * Clear all entries.
      */
     public void clear() {

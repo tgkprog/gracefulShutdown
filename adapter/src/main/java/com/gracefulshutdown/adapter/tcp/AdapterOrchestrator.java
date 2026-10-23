@@ -37,6 +37,9 @@ public class AdapterOrchestrator {
     private JsonYamlConverter converter;
     private volatile boolean running = false;
     private Socket centralSocket;
+    private volatile boolean procrHealthy = false;
+    private volatile boolean sessionStarted = false;
+    private TcpMessageSender messageSender;
     
     public AdapterOrchestrator(int processorThreadCount,
                                long responseCheckTtlMs,
@@ -78,8 +81,10 @@ public class AdapterOrchestrator {
         
         logger.info("✅ Connected to Central Server: {}", centralSocket.getInetAddress());
         
+        // Create TcpMessageSender for sending messages to Central
+        messageSender = new TcpMessageSender(centralSocket);
+        
         // Create and start SenderThread (reads from Central)
-        TcpMessageSender messageSender = new TcpMessageSender(centralSocket);
         senderThread = new SenderThread(centralSocket, transactionQueue, sessionManager, converter);
         senderThread.start();
         logger.info("SenderThread started");
@@ -102,8 +107,62 @@ public class AdapterOrchestrator {
         // Start background task to evict expired responses
         startResponseEvictionTask();
         
+        // Start PROCR health check and session auto-start
+        startProcrHealthCheckTask();
+        
         running = true;
         logger.info("✅ Adapter Orchestrator started successfully");
+    }
+    
+    /**
+     * Start background task to monitor PROCR health and auto-start session when available.
+     * Checks every 10 seconds for PROCR availability.
+     */
+    private void startProcrHealthCheckTask() {
+        Thread healthCheckThread = new Thread(() -> {
+            logger.info("PROCR health check task started (checking every 10 seconds)");
+            while (running) {
+                try {
+                    Thread.sleep(10000);
+                    
+                    boolean currentHealth = procrClient.isProcrHealthy();
+                    
+                    // Transition: PROCR became healthy and session not yet started
+                    if (currentHealth && !procrHealthy && !sessionStarted) {
+                        logger.info("✅ PROCR became available - auto-starting session");
+                        procrHealthy = true;
+                        
+                        try {
+                            // Send SESSION_START message to Central
+                            messageSender.sendSessionStart();
+                            // Also start session locally in Adapter
+                            sessionManager.startSession();
+                            sessionStarted = true;
+                            logger.info("✅ SESSION_START sent to Central and session started locally");
+                        } catch (Exception e) {
+                            logger.error("❌ Error sending SESSION_START to Central", e);
+                            sessionStarted = false;
+                        }
+                    }
+                    // Transition: PROCR became unhealthy
+                    else if (!currentHealth && procrHealthy) {
+                        logger.warn("⚠️ PROCR became unavailable");
+                        procrHealthy = false;
+                    }
+                    
+                } catch (InterruptedException e) {
+                    if (running) {
+                        logger.debug("PROCR health check interrupted");
+                    }
+                    break;
+                } catch (Exception e) {
+                    logger.error("Error in PROCR health check task", e);
+                }
+            }
+            logger.info("PROCR health check task stopped");
+        }, "ProcrHealthCheckThread");
+        healthCheckThread.setDaemon(false);
+        healthCheckThread.start();
     }
     
     /**
@@ -130,7 +189,13 @@ public class AdapterOrchestrator {
     }
     
     /**
-     * Gracefully shutdown the adapter and all threads.
+     * Gracefully shutdown the adapter with proper cache draining.
+     * 
+     * Steps:
+     * 1. Notify Central of SESSION_END in background thread (non-blocking)
+     * 2. Main thread polls ResponseCache every 150ms until empty
+     * 3. Stop all processing threads
+     * 4. Close connections
      */
     public void shutdown() {
         if (!running) {
@@ -141,6 +206,25 @@ public class AdapterOrchestrator {
         logger.info("Initiating graceful shutdown of Adapter Orchestrator");
         running = false;
         
+        // ===============================================
+        // Step 1: Send SESSION_END to Central (background)
+        // ===============================================
+        if (sessionManager != null && sessionManager.isSessionActive() && messageSender != null) {
+            logger.info("🔔 Sending SESSION_END to Central (background thread)");
+            Thread sessionEndThread = new Thread(new SessionEndNotifier(messageSender), "SessionEndNotifier");
+            sessionEndThread.setDaemon(false);
+            sessionEndThread.start();
+        }
+        
+        // ===============================================
+        // Step 2: Wait for cache to drain (main thread)
+        // ===============================================
+        logger.info("⏳ Starting cache drain monitoring (polling every 150ms)");
+        drainResponseCache();
+        
+        // ===============================================
+        // Step 3: Stop all processing threads
+        // ===============================================
         // Update session state
         if (sessionManager != null && sessionManager.isSessionActive()) {
             sessionManager.shutdown();
@@ -165,6 +249,9 @@ public class AdapterOrchestrator {
         // Wait for threads to complete
         waitForThreadCompletion();
         
+        // ===============================================
+        // Step 4: Close connections and cleanup
+        // ===============================================
         // Close Central socket
         if (centralSocket != null && !centralSocket.isClosed()) {
             try {
@@ -180,7 +267,56 @@ public class AdapterOrchestrator {
             responseCache.clear();
         }
         
-        logger.info("Adapter Orchestrator shutdown complete");
+        logger.info("✅ Adapter Orchestrator shutdown complete");
+    }
+    
+    /**
+     * Monitor and wait for ResponseCache to drain completely.
+     * Polls cache every 150ms and logs pending transaction count.
+     * No timeout - waits indefinitely until cache is empty.
+     */
+    private void drainResponseCache() {
+        while (true) {
+            int pending = responseCache.getPendingCount();
+            
+            if (pending == 0) {
+                logger.info("✅ Response cache drained - {} txns remaining", 0);
+                break;
+            }
+            
+            logger.info("⏳ Waiting for responses: {} txns remaining", pending);
+            
+            try {
+                Thread.sleep(150);
+            } catch (InterruptedException e) {
+                logger.warn("Cache drain monitoring interrupted");
+                break;
+            }
+        }
+    }
+    
+    /**
+     * Inner class: SessionEndNotifier sends SESSION_END message to Central.
+     * Runs in background thread to avoid blocking cache drain monitoring.
+     */
+    private static class SessionEndNotifier implements Runnable {
+        private static final Logger logger = LoggerFactory.getLogger(SessionEndNotifier.class);
+        private final TcpMessageSender messageSender;
+        
+        public SessionEndNotifier(TcpMessageSender messageSender) {
+            this.messageSender = messageSender;
+        }
+        
+        @Override
+        public void run() {
+            try {
+                logger.info("📤 SessionEndNotifier: Sending SESSION_END message to Central");
+                messageSender.sendSessionEnd();
+                logger.info("✅ SessionEndNotifier: SESSION_END sent successfully");
+            } catch (Exception e) {
+                logger.error("❌ SessionEndNotifier: Failed to send SESSION_END to Central", e);
+            }
+        }
     }
     
     /**

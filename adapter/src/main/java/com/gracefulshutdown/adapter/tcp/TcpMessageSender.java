@@ -24,10 +24,28 @@ public class TcpMessageSender {
     }
 
     /**
+     * Send SESSION_START message to Central
+     */
+    public void sendSessionStart() throws IOException {
+        String sessionStartMsg = "message_type: SESSION_START\n---\n";
+        send(sessionStartMsg);
+    }
+
+    /**
+     * Send SESSION_END message to Central
+     */
+    public void sendSessionEnd() throws IOException {
+        String sessionEndMsg = "message_type: SESSION_END\n---\n";
+        send(sessionEndMsg);
+    }
+
+    /**
      * Send JSON message back to Central
      */
     public void sendJson(String jsonMessage) throws IOException {
-        send(jsonMessage);
+        // Add YAML delimiter so Central's TcpReaderThread can parse it
+        String messageWithDelimiter = jsonMessage + "\n---\n";
+        send(messageWithDelimiter);
     }
 
     /**

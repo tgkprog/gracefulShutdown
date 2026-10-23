@@ -29,6 +29,15 @@ public class ResponseDelayCalculator {
         long step = sleepConfigService.getStep();
         long maxRandom = sleepConfigService.getMaxRandom();
 
+        // If step is 0, treat as "no random delay" and use minRandom only
+        if (step == 0 || maxRandom == 0) {
+            long totalDelay = fixedDelay + minRandom;
+            logger.debug("Delay calculation (zero step/max): fixed={}, min={}, step={}, max={}", fixedDelay, minRandom, step, maxRandom);
+            logger.debug("No random variation (step=0 or max=0), using min_random={}", minRandom);
+            logger.debug("Total sleep_ms={}", totalDelay);
+            return totalDelay;
+        }
+
         // Generate possible values: [min_random, min_random+step, min_random+2*step, ..., max_random]
         List<Long> possibleValues = new ArrayList<>();
         for (long value = minRandom; value <= maxRandom; value += step) {

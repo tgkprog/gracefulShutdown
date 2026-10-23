@@ -1,39 +1,62 @@
 #!/bin/bash
 
-# Kill Central Server on port 8080 (Web API)
-PORT=8080
+# Kill Central Server on ports 5000 (HTTP API) and 5009 (TCP)
+PORTS=(5000 5009)
 COMPONENT="Central Server"
 
-echo "🔍 Searching for $COMPONENT on port $PORT..."
+echo "🔍 Searching for $COMPONENT on ports: ${PORTS[@]}..."
 
-# Find process using the port
-PID=$(lsof -ti :$PORT 2>/dev/null | head -1)
+# Find all processes using the specified ports
+PIDS=()
+for PORT in "${PORTS[@]}"; do
+    PID=$(lsof -ti :$PORT 2>/dev/null | head -1)
+    if [ -n "$PID" ]; then
+        PIDS+=($PID)
+        echo "Found process on port $PORT: PID $PID"
+    fi
+done
 
-if [ -z "$PID" ]; then
-    echo "❌ No process found on port $PORT"
+if [ ${#PIDS[@]} -eq 0 ]; then
+    echo "❌ No processes found on ports: ${PORTS[@]}"
     exit 1
 fi
 
-echo "Found process: PID $PID"
-
 # Try to kill gracefully first
-echo "Killing $COMPONENT (PID: $PID)..."
-kill -15 $PID 2>/dev/null
+echo "Killing $COMPONENT processes (PIDs: ${PIDS[@]})..."
+for PID in "${PIDS[@]}"; do
+    kill -15 $PID 2>/dev/null
+done
 
 # Wait a bit
 sleep 2
 
-# Check if still running
-if kill -0 $PID 2>/dev/null; then
-    echo "⚠️  Process still running, forcing kill..."
-    kill -9 $PID
+# Check if still running and force kill if needed
+REMAINING_PIDS=()
+for PID in "${PIDS[@]}"; do
+    if kill -0 $PID 2>/dev/null; then
+        REMAINING_PIDS+=($PID)
+    fi
+done
+
+if [ ${#REMAINING_PIDS[@]} -gt 0 ]; then
+    echo "⚠️  Some processes still running, forcing kill..."
+    for PID in "${REMAINING_PIDS[@]}"; do
+        kill -9 $PID 2>/dev/null
+    done
     sleep 1
 fi
 
-# Verify
-if kill -0 $PID 2>/dev/null; then
-    echo "❌ Failed to kill process $PID"
+# Verify all killed
+FAILED_PIDS=()
+for PID in "${PIDS[@]}"; do
+    if kill -0 $PID 2>/dev/null; then
+        FAILED_PIDS+=($PID)
+    fi
+done
+
+if [ ${#FAILED_PIDS[@]} -gt 0 ]; then
+    echo "❌ Failed to kill processes: ${FAILED_PIDS[@]}"
     exit 1
 else
-    echo "✅ Successfully killed $COMPONENT (PID: $PID)"
+    echo "✅ Successfully killed $COMPONENT on all ports (PIDs: ${PIDS[@]})"
 fi

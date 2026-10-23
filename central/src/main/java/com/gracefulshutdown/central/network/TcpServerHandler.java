@@ -1,5 +1,6 @@
 package com.gracefulshutdown.central.network;
 
+import com.gracefulshutdown.central.application.MetricsService;
 import com.gracefulshutdown.central.application.ReceiverThreadPool;
 import com.gracefulshutdown.central.application.SessionManager;
 import com.gracefulshutdown.central.application.SessionState;
@@ -22,13 +23,14 @@ public class TcpServerHandler extends Thread {
     private final IncomingQueue incomingQueue;
     private final MessageParser messageParser;
     private final TransactionCache transactionCache;
+    private final MetricsService metricsService;
     private volatile boolean running = true;
     private ServerSocket serverSocket;
 
     public TcpServerHandler(int port, SessionManager sessionManager, SenderThreadPool senderThreadPool,
                            ReceiverThreadPool receiverThreadPool, OutgoingQueue outgoingQueue,
                            IncomingQueue incomingQueue, MessageParser messageParser,
-                           TransactionCache transactionCache) {
+                           TransactionCache transactionCache, MetricsService metricsService) {
         this.port = port;
         this.sessionManager = sessionManager;
         this.senderThreadPool = senderThreadPool;
@@ -37,6 +39,7 @@ public class TcpServerHandler extends Thread {
         this.incomingQueue = incomingQueue;
         this.messageParser = messageParser;
         this.transactionCache = transactionCache;
+        this.metricsService = metricsService;
         setName("TcpServerHandler");
         setDaemon(false);
     }
@@ -80,16 +83,17 @@ public class TcpServerHandler extends Thread {
     private void handleClientConnection(Socket clientSocket) {
         logger.info("Client connected: {}", clientSocket.getInetAddress());
         sessionManager.setState(SessionState.CONNECTED);
+        metricsService.onAdapterConnect();
         
         try {
             InputStream socketInput = clientSocket.getInputStream();
             OutputStream socketOutput = clientSocket.getOutputStream();
             
             TcpReaderThread readerThread = new TcpReaderThread(
-                socketInput, incomingQueue, sessionManager, messageParser
+                socketInput, incomingQueue, sessionManager, messageParser, metricsService, transactionCache
             );
             
-            TcpWriterThread writerThread = new TcpWriterThread(outgoingQueue, socketOutput);
+            TcpWriterThread writerThread = new TcpWriterThread(outgoingQueue, socketOutput, metricsService, transactionCache);
             
             senderThreadPool.start();
             receiverThreadPool.start();
@@ -120,6 +124,7 @@ public class TcpServerHandler extends Thread {
         
         logger.info("Client disconnected");
         sessionManager.setState(SessionState.DISCONNECTED);
+        metricsService.onAdapterDisconnect();
         cleanup();
     }
 

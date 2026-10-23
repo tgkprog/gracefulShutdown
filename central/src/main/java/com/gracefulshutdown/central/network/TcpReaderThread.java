@@ -1,5 +1,6 @@
 package com.gracefulshutdown.central.network;
 
+import com.gracefulshutdown.central.application.MetricsService;
 import com.gracefulshutdown.central.application.SessionManager;
 import com.gracefulshutdown.central.application.SessionState;
 import org.slf4j.Logger;
@@ -7,6 +8,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 
 public class TcpReaderThread extends Thread {
     private static final Logger logger = LoggerFactory.getLogger(TcpReaderThread.class);
@@ -14,14 +16,19 @@ public class TcpReaderThread extends Thread {
     private final IncomingQueue incomingQueue;
     private final SessionManager sessionManager;
     private final MessageParser messageParser;
+    private final MetricsService metricsService;
+    private final TransactionCache transactionCache;
     private volatile boolean running = true;
 
     public TcpReaderThread(InputStream socketInput, IncomingQueue incomingQueue,
-                          SessionManager sessionManager, MessageParser messageParser) {
+                          SessionManager sessionManager, MessageParser messageParser,
+                          MetricsService metricsService, TransactionCache transactionCache) {
         this.socketInput = socketInput;
         this.incomingQueue = incomingQueue;
         this.sessionManager = sessionManager;
         this.messageParser = messageParser;
+        this.metricsService = metricsService;
+        this.transactionCache = transactionCache;
         setName("TcpReaderThread");
         setDaemon(false);
     }
@@ -74,11 +81,13 @@ public class TcpReaderThread extends Thread {
             switch (messageType) {
                 case SESSION_START:
                     logger.info("Received SESSION_START");
+                    metricsService.onSessionStart();
                     sessionManager.startSession();
                     break;
                     
                 case SESSION_END:
                     logger.info("Received SESSION_END");
+                    metricsService.onSessionEnd();
                     sessionManager.requestSessionEnd();
                     break;
                     
@@ -86,6 +95,14 @@ public class TcpReaderThread extends Thread {
                     logger.debug("Received TXN_ACKNOWLEDGE");
                     try {
                         var ack = messageParser.parseAcknowledgment(yaml);
+                        long responseTimeMs = transactionCache.getResponseTimeMs(ack.getTxnId());
+                        
+                        logger.debug("Parsed acknowledgment: txnId={}, response_type={}, status={}, responseTime={}ms", 
+                            ack.getTxnId(), ack.getResponse_type(), ack.getStatus(), responseTimeMs);
+                        
+                        metricsService.recordTransactionReceived();
+                        metricsService.recordTransactionResult(ack.getResponse_type(), responseTimeMs);
+                        
                         incomingQueue.put(new AckData(ack));
                     } catch (Exception e) {
                         logger.error("Error parsing acknowledgment", e);

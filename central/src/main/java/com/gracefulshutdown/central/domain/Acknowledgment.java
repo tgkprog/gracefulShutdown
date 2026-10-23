@@ -5,16 +5,18 @@ import java.time.Instant;
 public class Acknowledgment {
     private String txnId;
     private String stan;
-    private String status;
+    private String response_type;  // APPROVE or REJECT (from PROCR)
+    private String status;         // SUCCESS or FAILED (processing status)
     private String reason;
     private Instant timestamp;
 
     public Acknowledgment() {
     }
 
-    public Acknowledgment(String txnId, String stan, String status, String reason, Instant timestamp) {
+    public Acknowledgment(String txnId, String stan, String response_type, String status, String reason, Instant timestamp) {
         this.txnId = txnId;
         this.stan = stan;
+        this.response_type = response_type;
         this.status = status;
         this.reason = reason;
         this.timestamp = timestamp;
@@ -25,6 +27,9 @@ public class Acknowledgment {
 
     public String getStan() { return stan; }
     public void setStan(String stan) { this.stan = stan; }
+
+    public String getResponse_type() { return response_type; }
+    public void setResponse_type(String response_type) { this.response_type = response_type; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
@@ -40,6 +45,7 @@ public class Acknowledgment {
         return "Acknowledgment{" +
                 "txnId='" + txnId + '\'' +
                 ", stan='" + stan + '\'' +
+                ", response_type='" + response_type + '\'' +
                 ", status='" + status + '\'' +
                 ", reason='" + reason + '\'' +
                 ", timestamp=" + timestamp +

@@ -54,7 +54,8 @@ public class ReceiverThreadPool {
                     var ack = ackData.getAcknowledgment();
                     
                     transactionCache.remove(ack.getTxnId());
-                    logger.info("Received ACK for {} (status: {})", ack.getTxnId(), ack.getStatus());
+                    logger.info("Received ACK for {} (response_type: {}, status: {})", 
+                        ack.getTxnId(), ack.getResponse_type(), ack.getStatus());
                     
                 } catch (InterruptedException e) {
                     logger.debug("{} interrupted", Thread.currentThread().getName());

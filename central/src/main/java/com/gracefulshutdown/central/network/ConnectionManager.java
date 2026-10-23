@@ -1,5 +1,6 @@
 package com.gracefulshutdown.central.network;
 
+import com.gracefulshutdown.central.application.MetricsService;
 import com.gracefulshutdown.central.application.ReceiverThreadPool;
 import com.gracefulshutdown.central.application.SessionManager;
 import com.gracefulshutdown.central.application.SenderThreadPool;
@@ -21,13 +22,14 @@ public class ConnectionManager {
     private final IncomingQueue incomingQueue;
     private final MessageParser messageParser;
     private final TransactionCache transactionCache;
+    private final MetricsService metricsService;
     private final int port;
     private TcpServerHandler tcpServerHandler;
 
     public ConnectionManager(SessionManager sessionManager, SenderThreadPool senderThreadPool,
                             ReceiverThreadPool receiverThreadPool, OutgoingQueue outgoingQueue,
                             IncomingQueue incomingQueue, MessageParser messageParser,
-                            TransactionCache transactionCache,
+                            TransactionCache transactionCache, MetricsService metricsService,
                             @Value("${tcp.server.port:5009}") int port) {
         this.sessionManager = sessionManager;
         this.senderThreadPool = senderThreadPool;
@@ -36,6 +38,7 @@ public class ConnectionManager {
         this.incomingQueue = incomingQueue;
         this.messageParser = messageParser;
         this.transactionCache = transactionCache;
+        this.metricsService = metricsService;
         this.port = port;
     }
 
@@ -44,7 +47,7 @@ public class ConnectionManager {
         logger.info("Starting ConnectionManager");
         tcpServerHandler = new TcpServerHandler(port, sessionManager, senderThreadPool,
                                                receiverThreadPool, outgoingQueue, incomingQueue,
-                                               messageParser, transactionCache);
+                                               messageParser, transactionCache, metricsService);
         tcpServerHandler.start();
         logger.info("ConnectionManager started");
     }

@@ -101,9 +101,9 @@ public class MetricsService {
      * Record transaction result
      */
     public synchronized void recordTransactionResult(String result, long responseTimeMs) {
-        if ("APPROVED".equals(result)) {
+        if ("APPROVE".equals(result) || "APPROVED".equals(result)) {
             txnsApproved++;
-        } else if ("REJECTED".equals(result)) {
+        } else if ("REJECT".equals(result) || "REJECTED".equals(result)) {
             txnsRejected++;
         } else if ("ERROR".equals(result)) {
             txnsErrored++;

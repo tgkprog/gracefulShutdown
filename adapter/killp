@@ -1,23 +1,41 @@
 #!/bin/bash
 
-# Kill Adapter on port 8081
+# Kill Adapter on port 8081 (HTTP API) or by JAR name if port not listening
 PORT=8081
 COMPONENT="Adapter"
+JAR_NAME="adapter-service"
 
-echo "🔍 Searching for $COMPONENT on port $PORT..."
+echo "🔍 Searching for $COMPONENT..."
 
-# Find process using the port
-PID=$(lsof -ti :$PORT 2>/dev/null | tail -1)
+# Try to find by port first
+PID=$(lsof -ti :$PORT 2>/dev/null | head -1)
+
+# If not found by port, search by JAR name
+if [ -z "$PID" ]; then
+    echo "⊘ No process on port $PORT, searching by JAR name..."
+    PID=$(ps aux | grep -E "java.*$JAR_NAME.*\.jar" | grep -v grep | awk '{print $2}' | head -1)
+    
+    if [ -n "$PID" ]; then
+        echo "Found $COMPONENT process by JAR name: PID $PID"
+        SEARCH_METHOD="JAR name"
+    fi
+fi
 
 if [ -z "$PID" ]; then
-    echo "❌ No process found on port $PORT"
+    echo "❌ No process found on port $PORT or with JAR name $JAR_NAME"
     exit 1
 fi
 
-echo "Found process: PID $PID"
+if [ -z "$SEARCH_METHOD" ]; then
+    echo "Found process on port $PORT: PID $PID"
+    SEARCH_METHOD="port $PORT"
+fi
+
+# Display process info
+echo "Process: $(ps -p $PID -o cmd= | cut -c1-100)"
 
 # Try to kill gracefully first
-echo "Killing $COMPONENT (PID: $PID)..."
+echo "Killing $COMPONENT (PID: $PID) - found by $SEARCH_METHOD..."
 kill -15 $PID 2>/dev/null
 
 # Wait a bit
@@ -37,3 +55,4 @@ if kill -0 $PID 2>/dev/null; then
 else
     echo "✅ Successfully killed $COMPONENT (PID: $PID)"
 fi
+

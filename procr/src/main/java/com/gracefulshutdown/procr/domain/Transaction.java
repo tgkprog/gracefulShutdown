@@ -1,17 +1,39 @@
 package com.gracefulshutdown.procr.domain;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * Transaction domain model for PROCR service
  */
 public class Transaction {
+@JsonProperty("txn_id")
+    @JsonAlias({"txnId", "transaction_id"})
     private String txn_id;
+    
+    @JsonProperty("stan")
     private String stan;
+    
+    @JsonProperty("type")
+    @JsonAlias("txnType")
     private String type;
+    
+    @JsonProperty("narration")
     private String narration;
+    
+    @JsonProperty("quantity")
     private Integer quantity;
+    
+    @JsonProperty("rate")
     private Double rate;
+    
+    @JsonProperty("taxes")
     private Double taxes;
+    
+    @JsonProperty("total")
     private Double total;
+    
+    @JsonProperty("timestamp")
     private String timestamp;
 
     public Transaction() {

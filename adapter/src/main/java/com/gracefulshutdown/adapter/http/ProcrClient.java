@@ -106,23 +106,23 @@ public class ProcrClient {
         logger.debug("Transaction {} - Posting to PROCR: url={}", txnId, url);
 
         try {
-            // Set up headers for YAML content
+            // Set up headers for JSON content (PROCR expects APPLICATION_JSON)
             HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.TEXT_PLAIN);  // YAML as text/plain
+            headers.setContentType(MediaType.APPLICATION_JSON);
             
-            // Create request
+            // Create request (despite parameter name, this is JSON for PROCR)
             HttpEntity<String> request = new HttpEntity<>(yamlTransaction, headers);
             
             // Post to PROCR
             ResponseEntity<String> responseEntity = restTemplate.postForEntity(url, request, String.class);
             
             if (responseEntity.getStatusCode().is2xxSuccessful()) {
-                String yamlResponse = responseEntity.getBody();
+                String jsonResponse = responseEntity.getBody();
                 logger.debug("Transaction {} - Received response from PROCR (length={})", 
-                    txnId, yamlResponse != null ? yamlResponse.length() : 0);
+                    txnId, jsonResponse != null ? jsonResponse.length() : 0);
                 
-                // Parse YAML response to Response object
-                Response response = parseYamlResponse(yamlResponse, txnId);
+                // Parse JSON response to Response object
+                Response response = parseJsonResponse(jsonResponse, txnId);
                 logger.info("Transaction {} - Processed: status={}", txnId, response.getStatus());
                 
                 return response;
@@ -164,25 +164,27 @@ public class ProcrClient {
     }
 
     /**
-     * Parse YAML response to Response object using YamlParser
+     * Parse JSON response to Response object using Jackson ObjectMapper
      */
-    private Response parseYamlResponse(String yamlContent, String txnId) throws Exception {
-        if (yamlContent == null) {
+    private Response parseJsonResponse(String jsonContent, String txnId) throws Exception {
+        if (jsonContent == null) {
             errorHandler.handleParseError("Transaction " + txnId, "null", 
-                new IllegalArgumentException("YAML response is null"));
-            throw new IllegalArgumentException("YAML response is null");
+                new IllegalArgumentException("JSON response is null"));
+            throw new IllegalArgumentException("JSON response is null");
         }
         
         try {
-            Response response = yamlParser.parseYamlToResponse(yamlContent);
+            // For now, parse manually or use YamlParser's JSON capability
+            // The Response object should be created from JSON
+            Response response = yamlParser.parseJsonToResponse(jsonContent);
             if (response == null) {
-                errorHandler.handleParseError("Transaction " + txnId, yamlContent, 
-                    new IllegalArgumentException("Failed to parse YAML response"));
-                throw new IllegalArgumentException("Failed to parse YAML response");
+                errorHandler.handleParseError("Transaction " + txnId, jsonContent, 
+                    new IllegalArgumentException("Failed to parse JSON response"));
+                throw new IllegalArgumentException("Failed to parse JSON response");
             }
             return response;
         } catch (Exception e) {
-            errorHandler.handleParseError("Transaction " + txnId, yamlContent, e);
+            errorHandler.handleParseError("Transaction " + txnId, jsonContent, e);
             throw e;
         }
     }

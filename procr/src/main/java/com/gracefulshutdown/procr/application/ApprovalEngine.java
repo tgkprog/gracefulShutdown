@@ -18,7 +18,7 @@ public class ApprovalEngine {
 
     public boolean decideApproval() {
         int randomValue = random.nextInt(100) + 1;  // 1-100
-        boolean approved = randomValue <= 99;
+        boolean approved = randomValue <= 99;  // Production: 1-99 approve, 100 reject (1%)
         
         logger.debug("Generated random: {} -> {}", randomValue, approved ? "APPROVE" : "REJECT");
         

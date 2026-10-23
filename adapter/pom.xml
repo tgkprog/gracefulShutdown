@@ -6,12 +6,12 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.gracefulshutdown</groupId>
-    <artifactId>adapter-json-yaml-converter</artifactId>
+    <artifactId>adapter-service</artifactId>
     <version>1.0.0</version>
     <packaging>jar</packaging>
 
-    <name>Adapter JSON/YAML Converter</name>
-    <description>JSON to YAML converter adapter with TCP server and HTTP client</description>
+    <name>Adapter Service</name>
+    <description>Adapter service that connects Central to PROCR with JSON/YAML conversion</description>
 
     <properties>
         <java.version>21</java.version>

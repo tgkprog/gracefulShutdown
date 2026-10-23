@@ -703,10 +703,10 @@
                     return response.json();
                 })
                 .then(data => {
-                    document.getElementById('fixedMs').value = data.fixed_ms || 0;
-                    document.getElementById('randomMinMs').value = data.random_min_ms || 0;
-                    document.getElementById('randomStepMs').value = data.random_step_ms || 100;
-                    document.getElementById('randomMaxMs').value = data.random_max_ms || 200;
+                    document.getElementById('fixedMs').value = (data.fixed_ms !== undefined) ? data.fixed_ms : 0;
+                    document.getElementById('randomMinMs').value = (data.random_min_ms !== undefined) ? data.random_min_ms : 0;
+                    document.getElementById('randomStepMs').value = (data.random_step_ms !== undefined) ? data.random_step_ms : 100;
+                    document.getElementById('randomMaxMs').value = (data.random_max_ms !== undefined) ? data.random_max_ms : 200;
                     showSleepMessage(`✓ Retrieved sleep config from PROCR (port ${port})`, false);
                 })
                 .catch(error => {
@@ -720,10 +720,10 @@
             const url = `http://localhost:${port}/config/sleep`;
             
             const payload = {
-                fixed_ms: parseInt(document.getElementById('fixedMs').value) || 0,
-                random_min_ms: parseInt(document.getElementById('randomMinMs').value) || 0,
-                random_step_ms: parseInt(document.getElementById('randomStepMs').value) || 100,
-                random_max_ms: parseInt(document.getElementById('randomMaxMs').value) || 200
+                fixed_ms: parseInt(document.getElementById('fixedMs').value) ?? 0,
+                random_min_ms: parseInt(document.getElementById('randomMinMs').value) ?? 0,
+                random_step_ms: parseInt(document.getElementById('randomStepMs').value) ?? 100,
+                random_max_ms: parseInt(document.getElementById('randomMaxMs').value) ?? 200
             };
             
             fetch(url, {
@@ -739,10 +739,10 @@
                 .then(data => {
                     showSleepMessage(`✓ Sleep config updated on PROCR (port ${port})`, false);
                     // Also update fields to reflect server response
-                    document.getElementById('fixedMs').value = data.fixed_ms || 0;
-                    document.getElementById('randomMinMs').value = data.random_min_ms || 0;
-                    document.getElementById('randomStepMs').value = data.random_step_ms || 100;
-                    document.getElementById('randomMaxMs').value = data.random_max_ms || 200;
+                    document.getElementById('fixedMs').value = (data.fixed_ms !== undefined) ? data.fixed_ms : 0;
+                    document.getElementById('randomMinMs').value = (data.random_min_ms !== undefined) ? data.random_min_ms : 0;
+                    document.getElementById('randomStepMs').value = (data.random_step_ms !== undefined) ? data.random_step_ms : 100;
+                    document.getElementById('randomMaxMs').value = (data.random_max_ms !== undefined) ? data.random_max_ms : 200;
                 })
                 .catch(error => {
                     showSleepMessage(`✗ Failed to update config: ${error.message}`, true);

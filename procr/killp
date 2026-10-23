@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Kill PROCR Processor on port 8081
-PORT=8081
+# Kill PROCR Processor on port 8080 (HTTP API)
+PORT=8080
 COMPONENT="PROCR Processor"
 
 echo "🔍 Searching for $COMPONENT on port $PORT..."
