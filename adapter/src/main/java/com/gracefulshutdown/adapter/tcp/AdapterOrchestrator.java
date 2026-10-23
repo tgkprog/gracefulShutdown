@@ -15,8 +15,8 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Orchestrates the adapter lifecycle:
- * - Manages TCP server for receiving connections
- * - Creates SenderThread for each connection (reads from Central)
+ * - Connects to Central Server (TCP client)
+ * - Creates SenderThread for reading transactions from Central
  * - Manages pool of ProcessorThreads (send to PROCR, receive responses)
  * - Coordinates graceful shutdown
  */
@@ -27,7 +27,7 @@ public class AdapterOrchestrator {
     private final long responseCheckTtlMs;
     private final long gracefulShutdownTimeoutMs;
     
-    private TcpServer tcpServer;
+    private TcpClientConnector tcpClientConnector;
     private SenderThread senderThread;
     private List<ProcessorThread> processorThreads;
     private TransactionQueue transactionQueue;
@@ -36,17 +36,18 @@ public class AdapterOrchestrator {
     private ProcrClient procrClient;
     private JsonYamlConverter converter;
     private volatile boolean running = false;
+    private Socket centralSocket;
     
     public AdapterOrchestrator(int processorThreadCount,
                                long responseCheckTtlMs,
                                long gracefulShutdownTimeoutMs,
-                               TcpServer tcpServer,
+                               TcpClientConnector tcpClientConnector,
                                ProcrClient procrClient,
                                JsonYamlConverter converter) {
         this.processorThreadCount = processorThreadCount;
         this.responseCheckTtlMs = responseCheckTtlMs;
         this.gracefulShutdownTimeoutMs = gracefulShutdownTimeoutMs;
-        this.tcpServer = tcpServer;
+        this.tcpClientConnector = tcpClientConnector;
         this.procrClient = procrClient;
         this.converter = converter;
         this.processorThreads = new ArrayList<>();
@@ -55,7 +56,7 @@ public class AdapterOrchestrator {
     }
     
     /**
-     * Start the adapter: initialize components and start all threads.
+     * Start the adapter: connect to Central and initialize components.
      */
     public void start() throws Exception {
         if (running) {
@@ -70,23 +71,16 @@ public class AdapterOrchestrator {
         responseCache = new ResponseCache(responseCheckTtlMs);
         sessionManager = new SessionManager();
         
-        // Start TCP server
-        logger.info("Starting TCP Server");
-        tcpServer.start();
+        // Connect to Central Server (auto-retry enabled)
+        logger.info("🔌 Connecting to Central Server at {}:{}", 
+            tcpClientConnector.getCentralHost(), tcpClientConnector.getCentralPort());
+        centralSocket = tcpClientConnector.connectToCentral();
         
-        // Wait for client connection
-        logger.info("Waiting for connection from Central...");
-        Socket clientSocket = tcpServer.acceptConnection();
-        
-        if (clientSocket == null) {
-            throw new RuntimeException("Failed to accept client connection");
-        }
-        
-        logger.info("Accepted connection from Central: {}", clientSocket.getInetAddress());
+        logger.info("✅ Connected to Central Server: {}", centralSocket.getInetAddress());
         
         // Create and start SenderThread (reads from Central)
-        TcpMessageSender messageSender = new TcpMessageSender(clientSocket);
-        senderThread = new SenderThread(clientSocket, transactionQueue, sessionManager, converter);
+        TcpMessageSender messageSender = new TcpMessageSender(centralSocket);
+        senderThread = new SenderThread(centralSocket, transactionQueue, sessionManager, converter);
         senderThread.start();
         logger.info("SenderThread started");
         
@@ -109,7 +103,7 @@ public class AdapterOrchestrator {
         startResponseEvictionTask();
         
         running = true;
-        logger.info("Adapter Orchestrator started successfully");
+        logger.info("✅ Adapter Orchestrator started successfully");
     }
     
     /**
@@ -171,13 +165,13 @@ public class AdapterOrchestrator {
         // Wait for threads to complete
         waitForThreadCompletion();
         
-        // Stop TCP server
-        if (tcpServer != null) {
+        // Close Central socket
+        if (centralSocket != null && !centralSocket.isClosed()) {
             try {
-                logger.info("Stopping TCP Server");
-                tcpServer.stop();
+                logger.info("Closing connection to Central Server");
+                centralSocket.close();
             } catch (Exception e) {
-                logger.error("Error stopping TCP server", e);
+                logger.error("Error closing Central socket", e);
             }
         }
         
@@ -272,6 +266,7 @@ public class AdapterOrchestrator {
         StringBuilder status = new StringBuilder();
         status.append("AdapterOrchestrator Status:\n");
         status.append("  Running: ").append(running).append("\n");
+        status.append("  Central Connection: ").append(centralSocket != null && !centralSocket.isClosed() ? "Connected" : "Disconnected").append("\n");
         status.append("  Sender: ").append(senderThread != null && senderThread.isRunning() ? "Active" : "Inactive").append("\n");
         status.append("  Processors: ").append(getActiveProcessorCount()).append("/").append(processorThreadCount).append("\n");
         status.append("  Queue Size: ").append(transactionQueue != null ? transactionQueue.size() : "N/A").append("\n");

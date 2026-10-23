@@ -2,7 +2,7 @@ package com.gracefulshutdown.adapter.service;
 
 import com.gracefulshutdown.adapter.http.ProcrClient;
 import com.gracefulshutdown.adapter.tcp.AdapterOrchestrator;
-import com.gracefulshutdown.adapter.tcp.TcpServer;
+import com.gracefulshutdown.adapter.tcp.TcpClientConnector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -12,13 +12,13 @@ import jakarta.annotation.PreDestroy;
 
 /**
  * AdapterService manages the lifecycle of the adapter and orchestrator.
- * Wires all components and handles Spring initialization/shutdown hooks.
+ * Connects to Central on startup and handles graceful shutdown.
  */
 @Service
 public class AdapterService {
     private static final Logger logger = LoggerFactory.getLogger(AdapterService.class);
     
-    private final TcpServer tcpServer;
+    private final TcpClientConnector tcpClientConnector;
     private final ProcrClient procrClient;
     private final JsonYamlConverter converter;
     
@@ -33,10 +33,10 @@ public class AdapterService {
     
     private AdapterOrchestrator orchestrator;
     
-    public AdapterService(TcpServer tcpServer,
+    public AdapterService(TcpClientConnector tcpClientConnector,
                          ProcrClient procrClient,
                          JsonYamlConverter converter) {
-        this.tcpServer = tcpServer;
+        this.tcpClientConnector = tcpClientConnector;
         this.procrClient = procrClient;
         this.converter = converter;
         logger.info("AdapterService instantiated");
@@ -44,7 +44,7 @@ public class AdapterService {
     
     /**
      * Initialize adapter after Spring context is ready.
-     * This starts TCP server and orchestrator.
+     * Connects to Central and starts orchestrator with auto-retry.
      */
     @PostConstruct
     public void init() {
@@ -56,28 +56,28 @@ public class AdapterService {
             if (!procrClient.isProcrHealthy()) {
                 logger.warn("WARNING: PROCR is not responding. Adapter will still start but may fail when processing.");
             } else {
-                logger.info("PROCR is healthy and ready");
+                logger.info("✅ PROCR is healthy and ready");
             }
             
-            // Create orchestrator
+            // Create orchestrator with TCP client connector
             orchestrator = new AdapterOrchestrator(
                 processorThreadCount,
                 responseCacheTtlMs,
                 gracefulShutdownTimeoutMs,
-                tcpServer,
+                tcpClientConnector,
                 procrClient,
                 converter
             );
             
-            // Start orchestrator (this will start TCP server and threads)
+            // Start orchestrator (this will connect to Central and start threads)
             orchestrator.start();
             
-            logger.info("AdapterService initialized successfully");
+            logger.info("✅ AdapterService initialized successfully");
             logger.info("Configuration: processors={}, cacheTTL={}ms, shutdownTimeout={}ms",
                 processorThreadCount, responseCacheTtlMs, gracefulShutdownTimeoutMs);
             
         } catch (Exception e) {
-            logger.error("Error initializing AdapterService", e);
+            logger.error("❌ Error initializing AdapterService", e);
             throw new RuntimeException("Failed to initialize adapter", e);
         }
     }

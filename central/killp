@@ -1,0 +1,39 @@
+#!/bin/bash
+
+# Kill Central Server on port 8080 (Web API)
+PORT=8080
+COMPONENT="Central Server"
+
+echo "🔍 Searching for $COMPONENT on port $PORT..."
+
+# Find process using the port
+PID=$(lsof -ti :$PORT 2>/dev/null | head -1)
+
+if [ -z "$PID" ]; then
+    echo "❌ No process found on port $PORT"
+    exit 1
+fi
+
+echo "Found process: PID $PID"
+
+# Try to kill gracefully first
+echo "Killing $COMPONENT (PID: $PID)..."
+kill -15 $PID 2>/dev/null
+
+# Wait a bit
+sleep 2
+
+# Check if still running
+if kill -0 $PID 2>/dev/null; then
+    echo "⚠️  Process still running, forcing kill..."
+    kill -9 $PID
+    sleep 1
+fi
+
+# Verify
+if kill -0 $PID 2>/dev/null; then
+    echo "❌ Failed to kill process $PID"
+    exit 1
+else
+    echo "✅ Successfully killed $COMPONENT (PID: $PID)"
+fi
