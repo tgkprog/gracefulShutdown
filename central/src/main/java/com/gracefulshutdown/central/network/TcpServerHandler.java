@@ -84,18 +84,20 @@ public class TcpServerHandler extends Thread {
         logger.info("Client connected: {}", clientSocket.getInetAddress());
         sessionManager.setState(SessionState.CONNECTED);
         metricsService.onAdapterConnect();
-        
+        TcpReaderThread readerThread = null;
+        TcpWriterThread writerThread = null;
+
         try {
             clientSocket.setSoTimeout(10000);  // 10 second read timeout for adapter communication
             
             InputStream socketInput = clientSocket.getInputStream();
             OutputStream socketOutput = clientSocket.getOutputStream();
             
-            TcpReaderThread readerThread = new TcpReaderThread(
+            readerThread = new TcpReaderThread(
                 socketInput, incomingQueue, sessionManager, messageParser, metricsService, transactionCache
             );
             
-            TcpWriterThread writerThread = new TcpWriterThread(outgoingQueue, socketOutput, metricsService, transactionCache);
+            writerThread = new TcpWriterThread(outgoingQueue, socketOutput, metricsService, transactionCache);
             
             senderThreadPool.start();
             receiverThreadPool.start();
@@ -104,19 +106,36 @@ public class TcpServerHandler extends Thread {
             writerThread.start();
             
             try {
+                // Reader exiting means peer disconnected or read loop ended.
                 readerThread.join();
-                writerThread.join();
+                logger.info("Reader thread finished; shutting down writer/pools for reconnection readiness");
+
+                // Stop producers/consumers before waiting on writer.
+                senderThreadPool.shutdown();
+                receiverThreadPool.shutdown();
+                writerThread.shutdown();
+
+                writerThread.join(3000);
+                if (writerThread.isAlive()) {
+                    logger.warn("Writer thread did not stop within timeout");
+                }
             } catch (InterruptedException e) {
                 logger.error("Interrupted waiting for reader/writer threads", e);
                 Thread.currentThread().interrupt();
             }
-            
-            senderThreadPool.shutdown();
-            receiverThreadPool.shutdown();
-            
         } catch (Exception e) {
             logger.error("Error handling client connection", e);
         } finally {
+            // Ensure resources are shut down even when exceptions happen early.
+            senderThreadPool.shutdown();
+            receiverThreadPool.shutdown();
+            if (readerThread != null) {
+                readerThread.shutdown();
+            }
+            if (writerThread != null) {
+                writerThread.shutdown();
+            }
+
             try {
                 clientSocket.close();
             } catch (Exception e) {

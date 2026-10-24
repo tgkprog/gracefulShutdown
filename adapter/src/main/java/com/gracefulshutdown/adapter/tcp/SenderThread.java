@@ -32,6 +32,8 @@ public class SenderThread extends Thread {
     private final ObjectMapper mapper = new ObjectMapper();
 
     private volatile boolean running = true;
+    private volatile long lastMessageAtMs = System.currentTimeMillis();
+    private volatile long receivedTxnCount = 0;
 
     public SenderThread(Socket clientSocket, 
                         TransactionQueue transactionQueue,
@@ -75,6 +77,8 @@ public class SenderThread extends Thread {
                 if (line.trim().isEmpty()) {
                     continue;
                 }
+
+                lastMessageAtMs = System.currentTimeMillis();
                 
                 try {
                     // Each line from Central should be a complete JSON object
@@ -225,6 +229,8 @@ public class SenderThread extends Thread {
             // Enqueue for processing
             boolean enqueued = transactionQueue.enqueue(txn);
             if (enqueued) {
+                receivedTxnCount++;
+                lastMessageAtMs = System.currentTimeMillis();
                 // Send acknowledgment back to Central in JSON format
                 String ackJson = "{\"txnId\": \"" + txnId + "\", \"status\": \"RECEIVED\", " +
                     "\"message\": \"Transaction received and queued for processing\"}";
@@ -263,5 +269,20 @@ public class SenderThread extends Thread {
      */
     public boolean isRunning() {
         return running;
+    }
+
+    /**
+     * Returns true when SenderThread saw any incoming message in the recent window.
+     */
+    public boolean hasRecentInboundActivity(long windowMs) {
+        return (System.currentTimeMillis() - lastMessageAtMs) <= windowMs;
+    }
+
+    public long getLastMessageAtMs() {
+        return lastMessageAtMs;
+    }
+
+    public long getReceivedTxnCount() {
+        return receivedTxnCount;
     }
 }

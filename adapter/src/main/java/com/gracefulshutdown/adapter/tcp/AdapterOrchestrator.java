@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit;
  */
 public class AdapterOrchestrator {
     private static final Logger logger = LoggerFactory.getLogger(AdapterOrchestrator.class);
-    private static final long MANDATORY_SHUTDOWN_WAIT_MS = 11000L;
+    private static final long SHUTDOWN_INBOUND_QUIESCE_MS = 2000L;
     
     private final int processorThreadCount;
     private final long responseCheckTtlMs;
@@ -106,13 +106,14 @@ public class AdapterOrchestrator {
         }
         logger.info("Started {} ProcessorThreads", processorThreadCount);
         
+        running = true;
+
         // Start background task to evict expired responses
         startResponseEvictionTask();
         
         // Start PROCR health check and session auto-start
         startProcrHealthCheckTask();
-        
-        running = true;
+
         logger.info("✅ Adapter Orchestrator started successfully");
     }
     
@@ -214,7 +215,7 @@ public class AdapterOrchestrator {
         waitForThreadCompletion();
         
         // ===============================================
-        // Step 6: Close connections and cleanup
+        // Step 5: Close connections and cleanup
         // ===============================================
         // Close Central socket
         if (centralSocket != null && !centralSocket.isClosed()) {
@@ -236,24 +237,13 @@ public class AdapterOrchestrator {
 
     private void shutdownSteps2to5(Thread sessionEndThread) {
         // ===============================================
-        // Step 2: Mandatory wait to allow final response propagation
-        // ===============================================
-        logger.info("⏳ Mandatory shutdown wait: {} ms", MANDATORY_SHUTDOWN_WAIT_MS);
-        try {
-            Thread.sleep(MANDATORY_SHUTDOWN_WAIT_MS);
-        } catch (InterruptedException e) {
-            logger.warn("Mandatory shutdown wait interrupted", e);
-            Thread.currentThread().interrupt();
-        }
-
-        // ===============================================
-        // Step 3: Wait for pending work to drain
+        // Step 2: Wait for pending work to drain
         // ===============================================
         logger.info("⏳ Starting pending-work drain monitoring (polling every 150ms)");
         drainResponseCache();
 
         // ===============================================
-        // Step 4: Wait for SESSION_END send thread completion (concurrent with drain above)
+        // Step 3: Wait for SESSION_END send thread completion (concurrent with drain above)
         // ===============================================
         if (sessionEndThread != null) {
             try {
@@ -271,7 +261,7 @@ public class AdapterOrchestrator {
         }
 
         // ===============================================
-        // Step 5: Stop intake and processing threads
+        // Step 4: Stop intake and processing threads
         // ===============================================
         // Update session state
         if (sessionManager != null && sessionManager.isSessionActive()) {
@@ -312,7 +302,7 @@ public class AdapterOrchestrator {
 
     /**
      * Monitor and wait for all pending work to drain completely.
-     * Checks queue depth, in-flight processor work, and cache depth.
+     * Checks queue depth, in-flight processor work, cache depth, and recent inbound activity.
      * Polls every 150ms.
      */
     private void drainResponseCache() {
@@ -320,15 +310,24 @@ public class AdapterOrchestrator {
             int queuePending = transactionQueue != null ? transactionQueue.size() : 0;
             int cachePending = responseCache != null ? responseCache.getPendingCount() : 0;
             int processingPending = getBusyProcessorCount();
+            boolean senderActive = senderThread != null && senderThread.isRunning();
+            boolean inboundRecent = senderActive && senderThread.hasRecentInboundActivity(SHUTDOWN_INBOUND_QUIESCE_MS);
             int totalPending = queuePending + cachePending + processingPending;
 
-            if (totalPending == 0) {
-                logger.info("✅ Pending work drained - queue=0, processing=0, cache=0");
+            if (totalPending == 0 && !inboundRecent) {
+                logger.info("✅ Pending work drained - queue=0, processing=0, cache=0, inboundRecent=false");
                 break;
             }
 
-            logger.info("⏳ Waiting for pending work: total={}, queue={}, processing={}, cache={}",
-                totalPending, queuePending, processingPending, cachePending);
+            logger.info("⏳ Waiting for pending work: total={}, queue={}, processing={}, cache={}, senderActive={}, inboundRecent={}, lastInboundAt={}, receivedTxns={}",
+                totalPending,
+                queuePending,
+                processingPending,
+                cachePending,
+                senderActive,
+                inboundRecent,
+                senderThread != null ? senderThread.getLastMessageAtMs() : -1,
+                senderThread != null ? senderThread.getReceivedTxnCount() : -1);
             
             try {
                 Thread.sleep(150);
