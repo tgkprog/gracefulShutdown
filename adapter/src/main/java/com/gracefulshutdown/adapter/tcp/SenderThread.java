@@ -27,8 +27,11 @@ public class SenderThread extends Thread {
     private final SessionManager sessionManager;
     private final JsonYamlConverter converter;
     private final TcpMessageSender messageSender;
+
+    private final ObjectMapper mapper = new ObjectMapper();
+
     private volatile boolean running = true;
-    
+
     public SenderThread(Socket clientSocket, 
                         TransactionQueue transactionQueue,
                         SessionManager sessionManager,
@@ -168,8 +171,7 @@ public class SenderThread extends Thread {
         }
         
         try {
-            // Parse JSON transaction from Central
-            ObjectMapper mapper = new ObjectMapper();
+            // Parse JSON transaction from Centra
             var jsonNode = mapper.readTree(jsonMessage);
             
             // Extract all fields from Central's JSON transaction (camelCase: txnId, txnType, etc.)

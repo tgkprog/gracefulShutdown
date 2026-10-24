@@ -32,4 +32,9 @@ public interface TransactionQueue {
      * Clear queue
      */
     void clear();
+    
+    /**
+     * Get queue capacity
+     */
+    int getCapacity();
 }

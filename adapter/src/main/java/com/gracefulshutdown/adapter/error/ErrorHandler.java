@@ -62,29 +62,6 @@ public class ErrorHandler {
     }
     
     /**
-     * Handle queue overflow warning.
-     */
-    public void handleQueueWarning(int currentSize, int capacity) {
-        int percentFull = (int) (100.0 * currentSize / capacity);
-        logger.warn("TransactionQueue {} % full ({}/{})", percentFull, currentSize, capacity);
-    }
-    
-    /**
-     * Handle queue critical (nearly full).
-     */
-    public void handleQueueCritical(int currentSize, int capacity) {
-        int percentFull = (int) (100.0 * currentSize / capacity);
-        logger.error("TransactionQueue {} % FULL ({}/{})", percentFull, currentSize, capacity);
-    }
-    
-    /**
-     * Log successful recovery after error.
-     */
-    public void logRecovery(String context, String details) {
-        logger.info("RECOVERY: {} - {}", context, details);
-    }
-    
-    /**
      * Log retry attempt.
      */
     public void logRetryAttempt(String txnId, int attemptNumber, int maxAttempts) {

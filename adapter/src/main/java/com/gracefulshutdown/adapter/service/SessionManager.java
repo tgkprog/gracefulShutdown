@@ -55,42 +55,31 @@ public class SessionManager {
     
     /**
      * Transition from SESSION_STARTED to PROCESSING.
+     * Enforces strict state machine: SESSION_STARTED → PROCESSING
      */
     public boolean beginProcessing() {
         boolean success = currentState.compareAndSet(AdapterState.SESSION_STARTED, AdapterState.PROCESSING);
         if (success) {
-            logger.info("Processing started");
+            logger.info("Session processing started");
         } else {
-            logger.warn("Cannot begin processing: current state is {}", currentState.get());
+            logger.warn("Cannot begin processing: current state is {} (expected SESSION_STARTED)", currentState.get());
         }
         return success;
     }
-    
+
     /**
-     * Transition from PROCESSING to SESSION_STARTED (still listening for messages).
-     */
-    public boolean pauseProcessing() {
-        boolean success = currentState.compareAndSet(AdapterState.PROCESSING, AdapterState.SESSION_STARTED);
-        if (success) {
-            logger.info("Processing paused, waiting for more messages");
-        } else {
-            logger.warn("Cannot pause processing: current state is {}", currentState.get());
-        }
-        return success;
-    }
-    
-    /**
-     * Transition from SESSION_STARTED to SESSION_ENDED.
+     * Transition from PROCESSING to SESSION_ENDED.
+     * Enforces strict state machine: PROCESSING → SESSION_ENDED
      */
     public boolean endSession() {
-        AdapterState current = currentState.get();
-        boolean success = currentState.compareAndSet(current, AdapterState.SESSION_ENDED);
+        boolean success = currentState.compareAndSet(AdapterState.PROCESSING, AdapterState.SESSION_ENDED);
         if (success) {
             sessionEndTime = System.currentTimeMillis();
             logger.info("Session ended at {}. Duration: {} ms", 
                 sessionEndTime, sessionEndTime - sessionStartTime);
         } else {
-            logger.warn("Cannot end session: current state is {}", currentState.get());
+            AdapterState current = currentState.get();
+            logger.warn("Cannot end session: current state is {} (expected PROCESSING)", current);
         }
         return success;
     }

@@ -66,7 +66,7 @@ public class AdapterOrchestrator {
             logger.warn("Adapter already running");
             return;
         }
-        
+
         logger.info("Starting Adapter Orchestrator");
         
         // Initialize components
@@ -97,16 +97,13 @@ public class AdapterOrchestrator {
                 responseCache, 
                 procrClient, 
                 messageSender,
-                converter
+                converter,
+                sessionManager
             );
             processorThread.start();
             processorThreads.add(processorThread);
         }
         logger.info("Started {} ProcessorThreads", processorThreadCount);
-        
-        // Set running flag BEFORE starting background tasks
-        // (threads check this flag in their while loops)
-        running = true;
         
         // Start background task to evict expired responses
         startResponseEvictionTask();
@@ -114,6 +111,7 @@ public class AdapterOrchestrator {
         // Start PROCR health check and session auto-start
         startProcrHealthCheckTask();
         
+        running = true;
         logger.info("✅ Adapter Orchestrator started successfully");
     }
     
@@ -126,8 +124,6 @@ public class AdapterOrchestrator {
             logger.info("PROCR health check task started (checking every 10 seconds)");
             while (running) {
                 try {
-                    Thread.sleep(10000);
-                    
                     boolean currentHealth = procrClient.isProcrHealthy();
                     
                     // Transition: PROCR became healthy and session not yet started
@@ -152,7 +148,7 @@ public class AdapterOrchestrator {
                         logger.warn("⚠️ PROCR became unavailable");
                         procrHealthy = false;
                     }
-                    
+                    Thread.sleep(5000);
                 } catch (InterruptedException e) {
                     if (running) {
                         logger.debug("PROCR health check interrupted");
@@ -176,7 +172,7 @@ public class AdapterOrchestrator {
             logger.info("Response eviction task started (checking every 5 seconds)");
             while (running) {
                 try {
-                    Thread.sleep(5000);
+                    Thread.sleep(1300);
                     responseCache.evictExpired();
                 } catch (InterruptedException e) {
                     if (running) {
@@ -209,14 +205,34 @@ public class AdapterOrchestrator {
         logger.info("Initiating graceful shutdown of Adapter Orchestrator");
         running = false;
         
+        Thread sessionEndThread = null;
+        
         // ===============================================
         // Step 1: Send SESSION_END to Central (background)
         // ===============================================
         if (sessionManager != null && sessionManager.isSessionActive() && messageSender != null) {
-            logger.info("🔔 Sending SESSION_END to Central (background thread)");
-            Thread sessionEndThread = new Thread(new SessionEndNotifier(messageSender), "SessionEndNotifier");
+            logger.info("🔔 Sending SESSION_END to Central");
+            sessionEndThread = new Thread(new SessionEndNotifier(messageSender), "SessionEndNotifier");
             sessionEndThread.setDaemon(false);
             sessionEndThread.start();
+        }
+        
+        // ===============================================
+        // Step 1.5: WAIT for SESSION_END to complete (ordering guarantee)
+        // ===============================================
+        if (sessionEndThread != null) {
+            try {
+                logger.info("⏳ Waiting for SESSION_END to reach Central...");
+                sessionEndThread.join(5000);  // timeout
+                if (sessionEndThread.isAlive()) {
+                    logger.warn("⚠️  SessionEndNotifier thread did not complete within 5 seconds");
+                } else {
+                    logger.info("✅ SESSION_END sent to Central");
+                }
+            } catch (InterruptedException e) {
+                logger.error("❌ Interrupted while waiting for SESSION_END", e);
+                Thread.currentThread().interrupt();
+            }
         }
         
         // ===============================================

@@ -8,7 +8,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import jakarta.annotation.PostConstruct;
-import jakarta.annotation.PreDestroy;
 
 /**
  * AdapterService manages the lifecycle of the adapter and orchestrator.
@@ -83,25 +82,6 @@ public class AdapterService {
     }
     
     /**
-     * Gracefully shutdown adapter when Spring context is closing.
-     */
-    @PreDestroy
-    public void shutdown() {
-        logger.info("Shutting down AdapterService");
-        
-        if (orchestrator != null && orchestrator.isRunning()) {
-            try {
-                orchestrator.shutdown();
-                logger.info("Orchestrator shutdown complete");
-            } catch (Exception e) {
-                logger.error("Error shutting down orchestrator", e);
-            }
-        }
-        
-        logger.info("AdapterService shutdown complete");
-    }
-    
-    /**
      * Get orchestrator status.
      */
     public String getStatus() {
@@ -110,6 +90,14 @@ public class AdapterService {
         }
         return orchestrator.getStatus();
     }
+    
+    /**
+     * Get orchestrator instance for internal shutdown operations.
+     */
+    public AdapterOrchestrator getOrchestrator() {
+        return orchestrator;
+    }
+    
     
     /**
      * Check if adapter is running.

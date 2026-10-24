@@ -86,6 +86,8 @@ public class TcpServerHandler extends Thread {
         metricsService.onAdapterConnect();
         
         try {
+            clientSocket.setSoTimeout(4000);  // 4 second read timeout for adapter communication
+            
             InputStream socketInput = clientSocket.getInputStream();
             OutputStream socketOutput = clientSocket.getOutputStream();
             

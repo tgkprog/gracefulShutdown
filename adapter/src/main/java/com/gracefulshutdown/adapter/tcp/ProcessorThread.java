@@ -6,6 +6,7 @@ import com.gracefulshutdown.adapter.http.ProcrClient;
 import com.gracefulshutdown.adapter.queue.ResponseCache;
 import com.gracefulshutdown.adapter.queue.TransactionQueue;
 import com.gracefulshutdown.adapter.service.JsonYamlConverter;
+import com.gracefulshutdown.adapter.service.SessionManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.io.IOException;
@@ -27,7 +28,9 @@ public class ProcessorThread extends Thread {
     private final ProcrClient procrClient;
     private final TcpMessageSender messageSender;
     private final JsonYamlConverter converter;
+    private final SessionManager sessionManager;
     private volatile boolean running = true;
+    private volatile boolean processingStarted = false;
     private int threadId;
     
     public ProcessorThread(int threadId,
@@ -35,7 +38,8 @@ public class ProcessorThread extends Thread {
                           ResponseCache responseCache,
                           ProcrClient procrClient,
                           TcpMessageSender messageSender,
-                          JsonYamlConverter converter) {
+                          JsonYamlConverter converter,
+                          SessionManager sessionManager) {
         super("ProcessorThread-" + threadId);
         this.threadId = threadId;
         this.transactionQueue = transactionQueue;
@@ -43,6 +47,7 @@ public class ProcessorThread extends Thread {
         this.procrClient = procrClient;
         this.messageSender = messageSender;
         this.converter = converter;
+        this.sessionManager = sessionManager;
         setDaemon(false);
     }
     
@@ -58,6 +63,16 @@ public class ProcessorThread extends Thread {
                 if (txn == null) {
                     // Thread interrupted or queue closed
                     break;
+                }
+                
+                // On first transaction, transition SESSION_STARTED → PROCESSING
+                if (!processingStarted) {
+                    if (sessionManager.beginProcessing()) {
+                        processingStarted = true;
+                        logger.info("ProcessorThread-{}: State transition: SESSION_STARTED → PROCESSING", threadId);
+                    } else {
+                        logger.warn("ProcessorThread-{}: Failed to transition to PROCESSING state", threadId);
+                    }
                 }
                 
                 logger.info("ProcessorThread-{}: Processing txn {} from client {}", 

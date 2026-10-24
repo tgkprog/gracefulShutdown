@@ -17,11 +17,13 @@ public class TransactionQueueImpl implements TransactionQueue {
     private static final Logger logger = LoggerFactory.getLogger(TransactionQueueImpl.class);
 
     private final BlockingQueue<Transaction> queue;
+    private final int capacity;
     private final int warnThreshold;
 
     public TransactionQueueImpl(@Value("${adapter.queue.capacity:100}") int capacity,
                                @Value("${adapter.queue.warn_threshold:80}") int warnThreshold) {
         this.queue = new LinkedBlockingQueue<>(capacity);
+        this.capacity = capacity;
         this.warnThreshold = warnThreshold;
         logger.info("TransactionQueue initialized: capacity={}, warn_threshold={}", capacity, warnThreshold);
     }
@@ -66,5 +68,10 @@ public class TransactionQueueImpl implements TransactionQueue {
     public void clear() {
         queue.clear();
         logger.info("Transaction queue cleared");
+    }
+
+    @Override
+    public int getCapacity() {
+        return capacity;
     }
 }

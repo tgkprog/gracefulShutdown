@@ -54,6 +54,7 @@ public class TcpClientConnector {
                 Socket socket = new Socket(centralHost, centralPort);
                 socket.setKeepAlive(true);
                 socket.setTcpNoDelay(true);
+                socket.setSoTimeout(4000);  // 4 second read timeout (less than join timeout 5000ms)
                 
                 logger.info("✅ Successfully connected to Central Server at {}:{} on attempt {}", 
                     centralHost, centralPort, attempt);

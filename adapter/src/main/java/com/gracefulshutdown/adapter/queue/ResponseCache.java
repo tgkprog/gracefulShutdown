@@ -86,7 +86,7 @@ public class ResponseCache {
         cache.entrySet().removeIf(entry -> entry.getValue().isExpired());
         int finalSize = cache.size();
         if (initialSize > finalSize) {
-            logger.info("Evicted {} expired entries from cache", initialSize - finalSize);
+            logger.info("Evicted {} expired entries from cache, final size {}.", initialSize - finalSize, finalSize);
         }
     }
     

@@ -78,9 +78,11 @@ public class HealthController {
         
         // Queue metrics
         Map<String, Object> queueMetrics = new HashMap<>();
-        queueMetrics.put("size", transactionQueue.size());
-        queueMetrics.put("capacity", 100);  // Default capacity
-        queueMetrics.put("percent_full", (int) (100.0 * transactionQueue.size() / 100));
+        int queueCapacity = transactionQueue.getCapacity();
+        int queueSize = transactionQueue.size();
+        queueMetrics.put("size", queueSize);
+        queueMetrics.put("capacity", queueCapacity);
+        queueMetrics.put("percent_full", (int) (100.0 * queueSize / queueCapacity));
         response.put("queue", queueMetrics);
         
         // Cache metrics
