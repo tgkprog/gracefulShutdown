@@ -30,6 +30,7 @@ public class ProcessorThread extends Thread {
     private final JsonYamlConverter converter;
     private final SessionManager sessionManager;
     private volatile boolean running = true;
+    private volatile boolean processingTxn = false;
     private volatile boolean processingStarted = false;
     private int threadId;
     
@@ -79,7 +80,12 @@ public class ProcessorThread extends Thread {
                     threadId, txn.getId(), txn.getClientId());
                 
                 // Process transaction
-                processTransaction(txn);
+                processingTxn = true;
+                try {
+                    processTransaction(txn);
+                } finally {
+                    processingTxn = false;
+                }
                 
             } catch (InterruptedException e) {
                 if (running) {
@@ -133,6 +139,9 @@ public class ProcessorThread extends Thread {
             messageSender.sendJson(jsonResponse);
             logger.info("ProcessorThread-{}: Sent response for txn {} back to Central", 
                 threadId, txn.getId());
+
+            // Step 6: Remove from cache after successful delivery to Central
+            responseCache.remove(txn.getId());
             
             long duration = System.currentTimeMillis() - startTime;
             logger.info("ProcessorThread-{}: Completed txn {} in {} ms", 
@@ -174,6 +183,13 @@ public class ProcessorThread extends Thread {
      */
     public boolean isRunning() {
         return running && this.isAlive();
+    }
+
+    /**
+     * Check if thread is actively processing a transaction.
+     */
+    public boolean isProcessingTxn() {
+        return processingTxn;
     }
     
     /**

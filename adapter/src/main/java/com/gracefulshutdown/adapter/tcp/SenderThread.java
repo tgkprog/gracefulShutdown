@@ -12,6 +12,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.util.UUID;
 
 /**
@@ -58,8 +59,19 @@ public class SenderThread extends Thread {
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(clientSocket.getInputStream()))) {
             
-            String line;
-            while (running && (line = reader.readLine()) != null) {
+            while (running) {
+                String line;
+                try {
+                    line = reader.readLine();
+                } catch (SocketTimeoutException e) {
+                    // Read timeout is expected for idle periods; keep polling while running.
+                    continue;
+                }
+
+                if (line == null) {
+                    break;
+                }
+
                 if (line.trim().isEmpty()) {
                     continue;
                 }
@@ -105,13 +117,21 @@ public class SenderThread extends Thread {
         
         // Parse JSON to determine message type
         var jsonNode = mapper.readTree(jsonMessage);
-        String messageType = jsonNode.get("message_type") != null ? 
+        String messageType = jsonNode.get("message_type") != null ?
             jsonNode.get("message_type").asText() : null;
-        
-        if ("SESSION_START".equals(messageType)) {
-            handleSessionStart();
-        } else if ("SESSION_END".equals(messageType)) {
-            handleSessionEnd();
+
+        if ("SESSION_START".equals(messageType) || "SESSION_END".equals(messageType)) {
+            SessionMessage sessionMessage = mapper.treeToValue(jsonNode, SessionMessage.class);
+            SessionMessage.MessageType sessionType = sessionMessage.getMessage_type();
+
+            if (sessionType == SessionMessage.MessageType.SESSION_START) {
+                handleSessionStart();
+            } else if (sessionType == SessionMessage.MessageType.SESSION_END) {
+                handleSessionEnd();
+            } else {
+                logger.warn("Unknown session message type: {}", sessionType);
+                messageSender.sendJson("{\"error\": \"Unknown session message type\"}");
+            }
         } else if ("TRANSACTION".equals(messageType) || jsonNode.has("txnId") || jsonNode.has("transaction_id")) {
             handleTransaction(jsonMessage);
         } else {

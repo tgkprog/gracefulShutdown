@@ -27,7 +27,7 @@ public class AdapterService {
     @Value("${adapter.cache.ttl_ms:30000}")
     private long responseCacheTtlMs;
     
-    @Value("${adapter.shutdown.timeout_ms:15000}")
+    @Value("${adapter.shutdown.timeout_ms:10000}")
     private long gracefulShutdownTimeoutMs;
     
     private AdapterOrchestrator orchestrator;

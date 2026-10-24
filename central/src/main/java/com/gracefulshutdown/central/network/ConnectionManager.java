@@ -58,7 +58,7 @@ public class ConnectionManager {
         if (tcpServerHandler != null) {
             tcpServerHandler.shutdown();
             try {
-                tcpServerHandler.join(5000);
+                tcpServerHandler.join(10000);
             } catch (InterruptedException e) {
                 logger.error("Interrupted waiting for server handler", e);
                 Thread.currentThread().interrupt();

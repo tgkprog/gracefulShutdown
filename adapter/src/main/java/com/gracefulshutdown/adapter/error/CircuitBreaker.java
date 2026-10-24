@@ -28,7 +28,7 @@ public class CircuitBreaker {
     @Value("${adapter.circuit_breaker.failure_threshold:5}")
     private int failureThreshold;
     
-    @Value("${adapter.circuit_breaker.timeout_ms:30000}")
+    @Value("${adapter.circuit_breaker.timeout_ms:10000}")
     private long timeoutMs;
     
     @Value("${adapter.circuit_breaker.half_open_max_calls:3}")

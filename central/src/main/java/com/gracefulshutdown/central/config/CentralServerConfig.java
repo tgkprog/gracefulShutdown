@@ -9,7 +9,7 @@ import org.springframework.context.annotation.Configuration;
 public class CentralServerConfig {
 
     @Bean
-    public TransactionCache transactionCache(@Value("${txn.timeout.seconds:9}") int timeoutSeconds) {
+    public TransactionCache transactionCache(@Value("${txn.timeout.seconds:10}") int timeoutSeconds) {
         return new TransactionCache(timeoutSeconds * 1000L);
     }
 }

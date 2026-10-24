@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit;
  */
 public class AdapterOrchestrator {
     private static final Logger logger = LoggerFactory.getLogger(AdapterOrchestrator.class);
+    private static final long MANDATORY_SHUTDOWN_WAIT_MS = 11000L;
     
     private final int processorThreadCount;
     private final long responseCheckTtlMs;
@@ -204,72 +205,16 @@ public class AdapterOrchestrator {
         
         logger.info("Initiating graceful shutdown of Adapter Orchestrator");
         running = false;
-        
-        Thread sessionEndThread = null;
-        
-        // ===============================================
-        // Step 1: Send SESSION_END to Central (background)
-        // ===============================================
-        if (sessionManager != null && sessionManager.isSessionActive() && messageSender != null) {
-            logger.info("🔔 Sending SESSION_END to Central");
-            sessionEndThread = new Thread(new SessionEndNotifier(messageSender), "SessionEndNotifier");
-            sessionEndThread.setDaemon(false);
-            sessionEndThread.start();
-        }
-        
-        // ===============================================
-        // Step 1.5: WAIT for SESSION_END to complete (ordering guarantee)
-        // ===============================================
-        if (sessionEndThread != null) {
-            try {
-                logger.info("⏳ Waiting for SESSION_END to reach Central...");
-                sessionEndThread.join(5000);  // timeout
-                if (sessionEndThread.isAlive()) {
-                    logger.warn("⚠️  SessionEndNotifier thread did not complete within 5 seconds");
-                } else {
-                    logger.info("✅ SESSION_END sent to Central");
-                }
-            } catch (InterruptedException e) {
-                logger.error("❌ Interrupted while waiting for SESSION_END", e);
-                Thread.currentThread().interrupt();
-            }
-        }
-        
-        // ===============================================
-        // Step 2: Wait for cache to drain (main thread)
-        // ===============================================
-        logger.info("⏳ Starting cache drain monitoring (polling every 150ms)");
-        drainResponseCache();
-        
-        // ===============================================
-        // Step 3: Stop all processing threads
-        // ===============================================
-        // Update session state
-        if (sessionManager != null && sessionManager.isSessionActive()) {
-            sessionManager.shutdown();
-        }
-        
-        // Stop SenderThread
-        if (senderThread != null && senderThread.isRunning()) {
-            logger.info("Stopping SenderThread");
-            senderThread.shutdown();
-        }
-        
-        // Stop all ProcessorThreads
-        if (processorThreads != null) {
-            for (ProcessorThread processorThread : processorThreads) {
-                if (processorThread.isRunning()) {
-                    logger.info("Stopping {}", processorThread.getName());
-                    processorThread.shutdown();
-                }
-            }
-        }
-        
+
+        Thread sessionEndThread = sessionEndTask();
+
+        shutdownSteps2to5(sessionEndThread);
+
         // Wait for threads to complete
         waitForThreadCompletion();
         
         // ===============================================
-        // Step 4: Close connections and cleanup
+        // Step 6: Close connections and cleanup
         // ===============================================
         // Close Central socket
         if (centralSocket != null && !centralSocket.isClosed()) {
@@ -288,22 +233,102 @@ public class AdapterOrchestrator {
         
         logger.info("✅ Adapter Orchestrator shutdown complete");
     }
-    
+
+    private void shutdownSteps2to5(Thread sessionEndThread) {
+        // ===============================================
+        // Step 2: Mandatory wait to allow final response propagation
+        // ===============================================
+        logger.info("⏳ Mandatory shutdown wait: {} ms", MANDATORY_SHUTDOWN_WAIT_MS);
+        try {
+            Thread.sleep(MANDATORY_SHUTDOWN_WAIT_MS);
+        } catch (InterruptedException e) {
+            logger.warn("Mandatory shutdown wait interrupted", e);
+            Thread.currentThread().interrupt();
+        }
+
+        // ===============================================
+        // Step 3: Wait for pending work to drain
+        // ===============================================
+        logger.info("⏳ Starting pending-work drain monitoring (polling every 150ms)");
+        drainResponseCache();
+
+        // ===============================================
+        // Step 4: Wait for SESSION_END send thread completion (concurrent with drain above)
+        // ===============================================
+        if (sessionEndThread != null) {
+            try {
+                logger.info("⏳ Waiting for SESSION_END thread completion...");
+                sessionEndThread.join(10000);  // timeout
+                if (sessionEndThread.isAlive()) {
+                    logger.warn("⚠️  SessionEndNotifier thread did not complete within 10 seconds");
+                } else {
+                    logger.info("✅ SESSION_END thread completed");
+                }
+            } catch (InterruptedException e) {
+                logger.error("❌ Interrupted while waiting for SESSION_END thread", e);
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        // ===============================================
+        // Step 5: Stop intake and processing threads
+        // ===============================================
+        // Update session state
+        if (sessionManager != null && sessionManager.isSessionActive()) {
+            sessionManager.shutdown();
+        }
+
+        // Stop SenderThread
+        if (senderThread != null && senderThread.isRunning()) {
+            logger.info("Stopping SenderThread");
+            senderThread.shutdown();
+        }
+
+        // Stop all ProcessorThreads
+        if (processorThreads != null) {
+            for (ProcessorThread processorThread : processorThreads) {
+                if (processorThread.isRunning()) {
+                    logger.info("Stopping {}", processorThread.getName());
+                    processorThread.shutdown();
+                }
+            }
+        }
+    }
+
+    private Thread sessionEndTask() {
+        Thread sessionEndThread = null;
+
+        // ===============================================
+        // Step 1: Send SESSION_END to Central (background)
+        // ===============================================
+        if (sessionManager != null && sessionManager.isSessionActive() && messageSender != null) {
+            logger.info("🔔 Sending SESSION_END to Central");
+            sessionEndThread = new Thread(new SessionEndNotifier(messageSender), "SessionEndNotifier");
+            sessionEndThread.setDaemon(false);
+            sessionEndThread.start();
+        }
+        return sessionEndThread;
+    }
+
     /**
-     * Monitor and wait for ResponseCache to drain completely.
-     * Polls cache every 150ms and logs pending transaction count.
-     * No timeout - waits indefinitely until cache is empty.
+     * Monitor and wait for all pending work to drain completely.
+     * Checks queue depth, in-flight processor work, and cache depth.
+     * Polls every 150ms.
      */
     private void drainResponseCache() {
         while (true) {
-            int pending = responseCache.getPendingCount();
-            
-            if (pending == 0) {
-                logger.info("✅ Response cache drained - {} txns remaining", 0);
+            int queuePending = transactionQueue != null ? transactionQueue.size() : 0;
+            int cachePending = responseCache != null ? responseCache.getPendingCount() : 0;
+            int processingPending = getBusyProcessorCount();
+            int totalPending = queuePending + cachePending + processingPending;
+
+            if (totalPending == 0) {
+                logger.info("✅ Pending work drained - queue=0, processing=0, cache=0");
                 break;
             }
-            
-            logger.info("⏳ Waiting for responses: {} txns remaining", pending);
+
+            logger.info("⏳ Waiting for pending work: total={}, queue={}, processing={}, cache={}",
+                totalPending, queuePending, processingPending, cachePending);
             
             try {
                 Thread.sleep(150);
@@ -440,6 +465,22 @@ public class AdapterOrchestrator {
         int count = 0;
         for (ProcessorThread thread : processorThreads) {
             if (thread.isRunning()) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Get count of processor threads actively processing a transaction.
+     */
+    private int getBusyProcessorCount() {
+        if (processorThreads == null) {
+            return 0;
+        }
+        int count = 0;
+        for (ProcessorThread thread : processorThreads) {
+            if (thread.isProcessingTxn()) {
                 count++;
             }
         }

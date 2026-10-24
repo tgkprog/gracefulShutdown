@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Adapter Code Review Report (Round 2)</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.5; max-width: 1200px; margin: 0 auto; padding: 20px; background: #f6f7f9; color: #222; }
+        h1, h2, h3 { color: #1f2d3d; }
+        .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin: 14px 0; }
+        .critical { border-left: 6px solid #dc2626; }
+        .high { border-left: 6px solid #ea580c; }
+        .medium { border-left: 6px solid #ca8a04; }
+        .low { border-left: 6px solid #16a34a; }
+        table { width: 100%; border-collapse: collapse; margin-top: 8px; background: #fff; }
+        th, td { border: 1px solid #e5e7eb; padding: 8px; text-align: left; vertical-align: top; }
+        th { background: #f1f5f9; }
+        code { background: #f1f5f9; padding: 1px 4px; border-radius: 4px; }
+        .ok { color: #15803d; font-weight: bold; }
+        .open { color: #b45309; font-weight: bold; }
+        .new { color: #b91c1c; font-weight: bold; }
+    </style>
+</head>
+<body>
+<h1>Adapter Module Review (Round 2)</h1>
+<p><strong>Date:</strong> 2026-10-24 &nbsp;|&nbsp; <strong>Scope:</strong> <code>adapter/src/main/java</code> re-audit against <code>adapter/docs/req.html</code></p>
+
+<div class="card">
+    <h2>Executive Outcome</h2>
+    <p>Most previously reported high/low cleanup items are fixed, but there are still <strong>critical/high functional gaps</strong> to address before calling this fully complete.</p>
+    <table>
+        <tr><th>Category</th><th>Count</th></tr>
+        <tr><td>Critical open</td><td>1</td></tr>
+        <tr><td>High open</td><td>2</td></tr>
+        <tr><td>Medium open</td><td>2</td></tr>
+        <tr><td>Low open</td><td>0</td></tr>
+    </table>
+</div>
+
+<div class="card">
+    <h2>Status of Original review.html Findings</h2>
+    <table>
+        <tr><th>#</th><th>Original Finding</th><th>Current Status</th><th>Notes</th></tr>
+        <tr><td>1</td><td>Dual lifecycle management</td><td class="ok">RESOLVED</td><td><code>ShutdownHookManager</code> removed.</td></tr>
+        <tr><td>2</td><td>TcpServer dead code</td><td class="ok">RESOLVED</td><td><code>TcpServer.java</code> removed.</td></tr>
+        <tr><td>3</td><td>shutdown() idempotency</td><td>NOT APPLIED</td><td>Marked non-applicable per maintainer direction.</td></tr>
+        <tr><td>4</td><td>SessionManager state ambiguity</td><td class="open">PARTIAL</td><td>State guards added, but introduced strict-end regression for zero-transaction sessions.</td></tr>
+        <tr><td>5</td><td>Unused ApplicationContext injection</td><td class="ok">RESOLVED</td><td>Removed with class deletion.</td></tr>
+        <tr><td>6</td><td>Hardcoded queue capacity metrics</td><td class="ok">RESOLVED</td><td>Uses <code>transactionQueue.getCapacity()</code>.</td></tr>
+        <tr><td>7</td><td>Unused ErrorHandler methods</td><td class="ok">RESOLVED</td><td>Methods removed.</td></tr>
+        <tr><td>8</td><td>Missing cache eviction logging</td><td class="ok">RESOLVED</td><td><code>ResponseCache.evictExpired()</code> logs eviction count.</td></tr>
+        <tr><td>9</td><td>Redundant state tracking</td><td class="open">OPEN</td><td><code>sessionStarted</code> still duplicated with <code>SessionManager</code>.</td></tr>
+        <tr><td>10</td><td>Health-check timing race</td><td class="open">OPEN (reframed)</td><td>No fixed-rate overlap now, but lifecycle/start-order defect exists (see Critical #1).</td></tr>
+        <tr><td>11</td><td>Unused import</td><td class="ok">RESOLVED</td><td>Unused import removed from remaining locations.</td></tr>
+        <tr><td>12</td><td>SessionMessage underutilized</td><td class="ok">RESOLVED</td><td><code>SenderThread</code> now deserializes <code>SessionMessage</code>.</td></tr>
+    </table>
+</div>
+
+<div class="card critical">
+    <h2>Critical Open Finding</h2>
+    <h3>C1 - Startup order race can disable background tasks</h3>
+    <p><strong>Evidence:</strong> <code>AdapterOrchestrator.start()</code> calls <code>startResponseEvictionTask()</code> and <code>startProcrHealthCheckTask()</code> before setting <code>running = true</code>.</p>
+    <ul>
+        <li><code>AdapterOrchestrator.java:108-114</code></li>
+        <li>Both threads loop on <code>while (running)</code> at <code>AdapterOrchestrator.java:125</code> and <code>:173</code>.</li>
+    </ul>
+    <p><strong>Impact:</strong> Either thread can exit immediately at startup, which may prevent automatic SESSION_START flow and periodic cache eviction.</p>
+</div>
+
+<div class="card high">
+    <h2>High Open Findings</h2>
+    <h3>H1 - SESSION_END can be rejected for valid zero-transaction session</h3>
+    <p><strong>Evidence:</strong> <code>SessionManager.endSession()</code> only allows <code>PROCESSING -&gt; SESSION_ENDED</code> via <code>compareAndSet</code>.</p>
+    <ul>
+        <li><code>SessionManager.java:74-76</code></li>
+        <li><code>SenderThread.handleSessionEnd()</code> depends on that result: <code>SenderThread.java:155-164</code></li>
+    </ul>
+    <p><strong>Requirement impact:</strong> <code>REQ-MSG-001</code> defines <code>TRANSACTION*</code> (zero or more). A session with no transaction should still end cleanly.</p>
+
+    <h3>H2 - ProcessorThread state-transition warning storm under multi-thread load</h3>
+    <p><strong>Evidence:</strong> Each processor thread attempts <code>sessionManager.beginProcessing()</code> once per thread-local flag, but only one thread can succeed.</p>
+    <ul>
+        <li><code>ProcessorThread.java:68-75</code></li>
+    </ul>
+    <p><strong>Impact:</strong> Non-winning threads can repeatedly log warnings, creating noisy logs and false alarm signals.</p>
+</div>
+
+<div class="card medium">
+    <h2>Medium Open Findings</h2>
+    <h3>M1 - Redundant session state sources still present</h3>
+    <p><strong>Evidence:</strong> <code>AdapterOrchestrator</code> keeps <code>sessionStarted</code>, while <code>SessionManager</code> tracks lifecycle state.</p>
+    <ul>
+        <li><code>AdapterOrchestrator.java:41,130,139,143</code></li>
+    </ul>
+    <p><strong>Risk:</strong> Drift/inconsistency between orchestrator boolean and state machine.</p>
+
+    <h3>M2 - Health-check interval mismatch in behavior vs log/comment</h3>
+    <p><strong>Evidence:</strong> Comment/log says 10 seconds, loop sleeps 5 seconds.</p>
+    <ul>
+        <li><code>AdapterOrchestrator.java:120,124,151</code></li>
+    </ul>
+    <p><strong>Impact:</strong> Operational confusion and incorrect expectations during incident analysis.</p>
+</div>
+
+<div class="card">
+    <h2>Recommended Remaining Work (Priority Order)</h2>
+    <ol>
+        <li>Fix startup ordering: set <code>running = true</code> before starting background threads (or gate loops with a dedicated lifecycle latch).</li>
+        <li>Allow SESSION_END from both <code>SESSION_STARTED</code> and <code>PROCESSING</code> to preserve <code>TRANSACTION*</code> semantics.</li>
+        <li>Remove orchestrator <code>sessionStarted</code> and derive from <code>SessionManager</code>.</li>
+        <li>Adjust ProcessorThread begin-processing logic to avoid repeated warning path on non-first workers.</li>
+        <li>Align health-check comments/log cadence with actual sleep interval.</li>
+    </ol>
+</div>
+
+</body>
+</html>
